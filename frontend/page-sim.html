@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Page IPR Simulator — Amazing Tools</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config={theme:{extend:{fontFamily:{sans:['Inter','sans-serif']}}}}</script>
+  <style>
+    *{font-family:'Inter',sans-serif}
+    body{background:#f8fafc;color:#101010}
+    .nav-link{color:#555;font-size:14px;font-weight:500;transition:color .15s;text-decoration:none}
+    .nav-link:hover{color:#0bb4aa}
+    .logout-btn{background:none;border:1px solid #e2e8f0;color:#555;padding:6px 14px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer}
+    .logout-btn:hover{border-color:#0bb4aa;color:#0bb4aa}
+    .card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+    th{text-align:left;padding:9px 14px;background:#f8fafc;color:#888;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #e2e8f0}
+    td{padding:8px 14px;border-bottom:1px solid #f1f5f9;font-size:12px;vertical-align:middle}
+    tr:last-child td{border-bottom:none}
+    tr:hover td{background:#fafcff}
+    select{border:1px solid #e2e8f0;border-radius:6px;padding:4px 8px;font-size:11px;outline:none;background:#fff}
+  </style>
+</head>
+<body class="min-h-screen">
+
+<nav style="background:#fff;border-bottom:1px solid #e2e8f0;position:sticky;top:0;z-index:50">
+  <div class="max-w-7xl mx-auto px-6 flex items-center justify-between" style="height:60px">
+    <a href="dashboard.html" style="font-weight:800;font-size:18px;color:#101010;text-decoration:none;letter-spacing:-0.5px">
+      Amazing <span style="color:#0bb4aa">Tools</span>
+    </a>
+    <div class="flex items-center gap-6">
+      <a href="seo-crawler.html" class="nav-link">SEO Crawler</a>
+      <a href="query-match.html" class="nav-link">QueryMatch</a>
+      <a href="ipr-sandbox.html" class="nav-link">IPR Sandbox</a>
+      <button class="logout-btn" onclick="logout()">Log out</button>
+    </div>
+  </div>
+</nav>
+
+<!-- Hero -->
+<div style="background:linear-gradient(135deg,#f0fdfc 0%,#fff 60%);border-bottom:1px solid #e2e8f0;padding:28px 0 22px">
+  <div class="max-w-7xl mx-auto px-6">
+    <div id="breadcrumb" style="display:flex;align-items:center;gap:6px;font-size:12px;color:#aaa;margin-bottom:8px">
+      <a href="dashboard.html" style="color:#aaa;text-decoration:none">Dashboard</a>
+      <span>›</span>
+      <a id="back-sandbox" href="ipr-sandbox.html" style="color:#aaa;text-decoration:none">IPR Sandbox</a>
+      <span>›</span>
+      <span style="color:#555">Page Simulator</span>
+    </div>
+    <h1 style="font-size:1.5rem;font-weight:800;color:#101010;letter-spacing:-0.5px;margin-bottom:4px">Page IPR Simulator</h1>
+    <p style="color:#666;font-size:13px">Add or remove internal links for a specific page and see how it affects Internal PageRank across the whole site.</p>
+  </div>
+</div>
+
+<!-- Loading state -->
+<div id="state-loading" class="max-w-7xl mx-auto px-6 py-12" style="text-align:center;color:#aaa;font-size:14px">
+  Loading crawl data…
+</div>
+
+<!-- Picker (no URL param) -->
+<div id="state-picker" class="max-w-7xl mx-auto px-6 py-8" style="display:none">
+  <div class="card" style="padding:28px;max-width:680px">
+    <p style="font-size:13px;font-weight:700;color:#101010;margin:0 0 6px">Select a crawl job</p>
+    <p style="font-size:12px;color:#aaa;margin:0 0 16px">Choose the job, then pick the page you want to simulate.</p>
+    <div id="picker-job-list" style="display:flex;flex-direction:column;gap:8px"></div>
+  </div>
+</div>
+
+<!-- Main simulator -->
+<div id="state-sim" class="max-w-7xl mx-auto px-6 py-6" style="display:none">
+
+  <!-- URL switcher (when no url param) -->
+  <div id="url-switcher" style="display:none;margin-bottom:16px">
+    <div class="card" style="padding:14px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#aaa;margin:0">Simulate page:</label>
+      <select id="url-select" onchange="switchPage(this.value)" style="flex:1;min-width:200px;padding:6px 10px;font-size:12px"></select>
+    </div>
+  </div>
+
+  <div class="card" style="overflow:hidden">
+
+    <!-- Header -->
+    <div style="padding:16px 22px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+      <div style="min-width:0;flex:1">
+        <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#aaa;margin:0 0 3px">Simulating page</p>
+        <p id="ps-url-label" style="font-size:13px;font-weight:700;color:#101010;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></p>
+      </div>
+      <div style="display:flex;gap:8px;flex-shrink:0">
+        <button onclick="psReset()" style="background:#fef2f2;border:1px solid #fecaca;color:#dc2626;border-radius:8px;padding:6px 16px;font-size:12px;font-weight:600;cursor:pointer">↺ Reset</button>
+        <a id="ps-sandbox-link" href="ipr-sandbox.html" style="background:#f0fdfc;border:1px solid #b2ede9;color:#0bb4aa;border-radius:8px;padding:6px 16px;font-size:12px;font-weight:600;text-decoration:none">← Sandbox</a>
+      </div>
+    </div>
+
+    <!-- IPR score bar -->
+    <div style="padding:16px 22px;border-bottom:1px solid #f1f5f9;display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 22px;text-align:center;min-width:110px">
+        <div id="ps-orig" style="font-size:24px;font-weight:800;color:#555">—</div>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#aaa;margin-top:2px">Original IPR</div>
+      </div>
+      <div style="font-size:24px;color:#cbd5e1;padding:0 4px">→</div>
+      <div style="background:#f0fdfc;border:1px solid #b2ede9;border-radius:10px;padding:12px 22px;text-align:center;min-width:110px">
+        <div id="ps-sim" style="font-size:24px;font-weight:800;color:#0bb4aa">—</div>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#aaa;margin-top:2px">Simulated IPR</div>
+      </div>
+      <div style="padding:0 6px">
+        <div id="ps-delta" style="font-size:20px;font-weight:800;color:#888">─</div>
+        <div style="font-size:10px;color:#aaa;font-weight:600;margin-top:2px">DELTA</div>
+      </div>
+      <div style="margin-left:auto;background:#fffbf0;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;font-size:11px;color:#92400e;max-width:300px;line-height:1.6">
+        <strong>ℹ External links</strong> from other domains boost real-world PageRank but aren't modelled here. This tool simulates <em>internal</em> link equity distribution only.
+      </div>
+    </div>
+
+    <!-- Two-column: Inbound | Outbound -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid #f1f5f9">
+      <div id="ps-inbound-col" style="padding:18px 22px;border-right:1px solid #f1f5f9;overflow-y:auto;max-height:360px"></div>
+      <div id="ps-outbound-col" style="padding:18px 22px;overflow-y:auto;max-height:360px"></div>
+    </div>
+
+    <!-- IPR movers table -->
+    <div style="padding:16px 22px">
+      <p style="font-size:12px;font-weight:700;color:#101010;margin:0 0 10px">
+        Full-site IPR impact
+        <span style="font-size:11px;font-weight:400;color:#aaa"> — top pages moved by this simulation</span>
+      </p>
+      <div style="overflow-x:auto">
+        <table style="width:100%">
+          <thead><tr>
+            <th style="min-width:220px">Page</th>
+            <th style="text-align:center">Before</th>
+            <th style="text-align:center">After</th>
+            <th style="text-align:center">Delta</th>
+            <th style="text-align:center">Simulate</th>
+          </tr></thead>
+          <tbody id="ps-movers"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  const API_BASE = 'https://web-production-c14f30.up.railway.app';
+  if (!sessionStorage.getItem('at_auth')) window.location.href = 'login.html';
+  function logout() { sessionStorage.removeItem('at_auth'); window.location.href = 'login.html'; }
+  function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  /* ── State ── */
+  let psUrl = null;
+  let psAllNodes = [];
+  let psSimLinks = [];
+  let psOrigLinks = [];
+  let psOrigIPR = {};
+  let psSimIPR = {};
+  let currentJobId = null;
+  let allPages = [];
+
+  /* ── Client-side IPR (d=0.85, 50 iters) ── */
+  function computePR(nodes, links) {
+    const d=0.85, it=50, N=nodes.length;
+    if (!N) return {};
+    const urls=nodes.map(n=>n.id), us=new Set(urls);
+    const out={}, inn={};
+    urls.forEach(u=>{out[u]=[];inn[u]=[];});
+    links.forEach(l=>{
+      const s=l.source?.id??l.source, t=l.target?.id??l.target;
+      if(us.has(s)&&us.has(t)&&s!==t&&!out[s].includes(t)){out[s].push(t);inn[t].push(s);}
+    });
+    let pr={}; urls.forEach(u=>pr[u]=1/N);
+    for(let i=0;i<it;i++){
+      const dg=urls.reduce((s,u)=>s+(out[u].length?0:pr[u]),0);
+      const np={};
+      urls.forEach(u=>{
+        let ri=dg/N;
+        inn[u].forEach(s=>{if(out[s].length)ri+=pr[s]/out[s].length;});
+        np[u]=(1-d)/N+d*ri;
+      });
+      pr=np;
+    }
+    const mx=Math.max(...Object.values(pr),1e-9);
+    const norm={}; urls.forEach(u=>norm[u]=pr[u]*10/mx);
+    return norm;
+  }
+
+  function initSim(pages, jobId, targetUrl) {
+    currentJobId = jobId;
+    allPages = pages;
+    const urlSet = new Set(pages.map(p=>p.url));
+    psAllNodes = pages.map(p=>({id:p.url}));
+    psOrigLinks = [];
+    pages.forEach(p=>{
+      (p.internal_links||[]).forEach(t=>{
+        if(urlSet.has(t)&&t!==p.url) psOrigLinks.push({source:p.url,target:t});
+      });
+    });
+    pages.forEach(p=>{psOrigIPR[p.url]=p.ipr||0;});
+
+    /* Populate URL switcher if no url param */
+    const sel = document.getElementById('url-select');
+    const sorted = [...pages].sort((a,b)=>(b.ipr||0)-(a.ipr||0));
+    sel.innerHTML = sorted.map(p=>`<option value="${p.url}">${esc(p.url.replace(/^https?:\/\/[^/]+/,'')||'/')}</option>`).join('');
+
+    const url = targetUrl || sorted[0]?.url;
+    if (!url) return;
+
+    sel.value = url;
+    openPage(url);
+  }
+
+  function openPage(url) {
+    psUrl = url;
+    psSimLinks = psOrigLinks.map(l=>({...l}));
+    psSimIPR = computePR(psAllNodes, psSimLinks);
+    document.getElementById('ps-url-label').textContent = url.replace(/^https?:\/\/[^/]+/,'')||'/';
+    document.getElementById('ps-url-label').title = url;
+    document.getElementById('ps-sandbox-link').href = `ipr-sandbox.html?job=${currentJobId}`;
+    document.getElementById('back-sandbox').href = `ipr-sandbox.html?job=${currentJobId}`;
+    document.getElementById('state-sim').style.display = '';
+    psRender();
+  }
+
+  function switchPage(url) { openPage(url); }
+
+  function psRemoveLink(src, dst) {
+    psSimLinks = psSimLinks.filter(l=>{const s=l.source?.id??l.source,t=l.target?.id??l.target;return!(s===src&&t===dst);});
+    psSimIPR = computePR(psAllNodes, psSimLinks);
+    psRender();
+  }
+
+  function psAddLink(src, dst) {
+    if (!src||!dst||src===dst) return;
+    if (!psSimLinks.some(l=>{const s=l.source?.id??l.source,t=l.target?.id??l.target;return s===src&&t===dst;})) {
+      psSimLinks.push({source:src,target:dst});
+      psSimIPR = computePR(psAllNodes, psSimLinks);
+    }
+    psRender();
+  }
+
+  function psReset() {
+    psSimLinks = psOrigLinks.map(l=>({...l}));
+    psSimIPR = computePR(psAllNodes, psSimLinks);
+    psRender();
+  }
+
+  function psRender() {
+    const su = u=>u.replace(/^https?:\/\/[^/]+/,'')||'/';
+    const origS = psOrigIPR[psUrl]||0, simS = psSimIPR[psUrl]||0, delta = simS-origS;
+    const dc = delta>0.005?'#059669':delta<-0.005?'#dc2626':'#888';
+    const ds = delta>0.005?`▲ +${delta.toFixed(3)}`:delta<-0.005?`▼ ${delta.toFixed(3)}`:'─ no change';
+
+    document.getElementById('ps-orig').textContent  = origS.toFixed(3);
+    document.getElementById('ps-sim').textContent   = simS.toFixed(3);
+    document.getElementById('ps-sim').style.color   = simS>origS?'#059669':simS<origS?'#dc2626':'#0bb4aa';
+    document.getElementById('ps-delta').textContent = ds;
+    document.getElementById('ps-delta').style.color = dc;
+
+    const inbound  = psSimLinks.filter(l=>(l.target?.id??l.target)===psUrl).map(l=>l.source?.id??l.source);
+    const outbound = psSimLinks.filter(l=>(l.source?.id??l.source)===psUrl).map(l=>l.target?.id??l.target);
+    const others   = psAllNodes.map(n=>n.id).filter(u=>u!==psUrl);
+    const notIn    = others.filter(u=>!inbound.includes(u));
+    const notOut   = others.filter(u=>!outbound.includes(u));
+
+    const rmBtn=(s,t)=>`<button onclick="psRemoveLink('${s.replace(/'/g,"\\'")}','${t.replace(/'/g,"\\'")}')"
+      style="background:#fef2f2;border:1px solid #fecaca;color:#dc2626;border-radius:4px;padding:2px 8px;font-size:10px;font-weight:700;cursor:pointer;flex-shrink:0">✕ Remove</button>`;
+    const linkRow=(url,s,t)=>`<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid #f8fafc">
+      <span style="font-size:11px;color:#333;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1" title="${esc(url)}">${esc(su(url))}</span>${rmBtn(s,t)}</div>`;
+    const selOpts=arr=>arr.slice(0,300).map(u=>`<option value="${u}">${esc(su(u))}</option>`).join('');
+
+    /* Inbound column */
+    document.getElementById('ps-inbound-col').innerHTML =
+      `<p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#059669;margin:0 0 10px">
+        ← Inbound Links <span style="color:#aaa;font-weight:500">(${inbound.length} pages link here)</span></p>` +
+      (inbound.length ? inbound.map(s=>linkRow(s,s,psUrl)).join('') : '<p style="font-size:12px;color:#aaa">No pages link to this page yet.</p>') +
+      `<div style="margin-top:14px;padding-top:12px;border-top:1px solid #f1f5f9">
+        <p style="font-size:11px;font-weight:700;color:#101010;margin:0 0 8px">+ Add an inbound link</p>
+        <p style="font-size:11px;color:#666;margin:0 0 8px">Choose a page that should link <strong>to</strong> this page:</p>
+        <div style="display:flex;gap:6px;align-items:center">
+          <select id="ps-in-sel" style="flex:1">${selOpts(notIn)}</select>
+          <button onclick="psAddLink(document.getElementById('ps-in-sel').value,'${psUrl.replace(/'/g,"\\'")}')"
+            style="background:#059669;color:#fff;border:none;border-radius:6px;padding:5px 14px;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0">Add</button>
+        </div>
+      </div>`;
+
+    /* Outbound column */
+    document.getElementById('ps-outbound-col').innerHTML =
+      `<p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#0bb4aa;margin:0 0 10px">
+        Outbound Links → <span style="color:#aaa;font-weight:500">(this page links to ${outbound.length} pages)</span></p>` +
+      (outbound.length ? outbound.map(t=>linkRow(t,psUrl,t)).join('') : '<p style="font-size:12px;color:#aaa">This page links to no other pages.</p>') +
+      `<div style="margin-top:14px;padding-top:12px;border-top:1px solid #f1f5f9">
+        <p style="font-size:11px;font-weight:700;color:#101010;margin:0 0 8px">+ Add an outbound link</p>
+        <p style="font-size:11px;color:#666;margin:0 0 8px">Choose a page this page should link <strong>to</strong>:</p>
+        <div style="display:flex;gap:6px;align-items:center">
+          <select id="ps-out-sel" style="flex:1">${selOpts(notOut)}</select>
+          <button onclick="psAddLink('${psUrl.replace(/'/g,"\\')}',document.getElementById('ps-out-sel').value)"
+            style="background:#0bb4aa;color:#fff;border:none;border-radius:6px;padding:5px 14px;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0">Add</button>
+        </div>
+      </div>`;
+
+    /* Movers table */
+    const movers = Object.keys(psSimIPR)
+      .map(u=>({url:u,orig:psOrigIPR[u]||0,sim:psSimIPR[u]||0,d:(psSimIPR[u]||0)-(psOrigIPR[u]||0)}))
+      .filter(r=>Math.abs(r.d)>0.002)
+      .sort((a,b)=>Math.abs(b.d)-Math.abs(a.d))
+      .slice(0,20);
+
+    document.getElementById('ps-movers').innerHTML = movers.length
+      ? movers.map(r=>{
+          const c=r.d>0?'#059669':'#dc2626';
+          const s=r.d>0?`▲ +${r.d.toFixed(3)}`:`▼ ${r.d.toFixed(3)}`;
+          const self=r.url===psUrl;
+          return `<tr style="${self?'background:#f0fdfc':''}">
+            <td style="color:${self?'#0bb4aa':'#333'};font-weight:${self?'600':'400'}" title="${esc(r.url)}">${esc(su(r.url))}</td>
+            <td style="text-align:center;color:#888">${r.orig.toFixed(3)}</td>
+            <td style="text-align:center;font-weight:600">${r.sim.toFixed(3)}</td>
+            <td style="text-align:center;font-weight:700;color:${c}">${s}</td>
+            <td style="text-align:center">
+              ${!self?`<button onclick="switchPage('${r.url.replace(/'/g,"\\'")}')" style="background:#f0fdfc;border:1px solid #b2ede9;color:#0bb4aa;border-radius:5px;padding:2px 8px;font-size:10px;font-weight:600;cursor:pointer">Simulate</button>`:'<span style="font-size:10px;color:#aaa">current</span>'}
+            </td>
+          </tr>`;
+        }).join('')
+      : `<tr><td colspan="5" style="text-align:center;color:#aaa;padding:16px;font-size:12px">No changes yet — add or remove links above to see the impact</td></tr>`;
+  }
+
+  /* ── Data loading ── */
+  async function loadAndInit(jobId, targetUrl) {
+    try {
+      const r = await fetch(`${API_BASE}/api/jobs/${jobId}`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const job = await r.json();
+      if (job.status !== 'done' || !job.results) throw new Error('Job not ready');
+      const pages = job.results[job.client_url]?.pages || [];
+      document.getElementById('state-loading').style.display = 'none';
+      initSim(pages, jobId, targetUrl);
+      /* Show URL switcher only when no specific page was passed */
+      if (!targetUrl) document.getElementById('url-switcher').style.display = '';
+    } catch(e) {
+      document.getElementById('state-loading').textContent = `Error: ${e.message}`;
+    }
+  }
+
+  async function loadJobList() {
+    document.getElementById('state-loading').style.display = 'none';
+    document.getElementById('state-picker').style.display = '';
+    try {
+      const r = await fetch(`${API_BASE}/api/jobs?limit=20`);
+      const jobs = (await r.json()).filter(j=>j.status==='done');
+      document.getElementById('picker-job-list').innerHTML = jobs.length
+        ? jobs.map(j=>`
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border:1px solid #e2e8f0;border-radius:8px">
+            <div>
+              <p style="font-size:13px;font-weight:600;color:#101010;margin:0">${esc(j.client_url)}</p>
+              <p style="font-size:11px;color:#aaa;margin:2px 0 0">${new Date(j.completed_at||j.created_at).toLocaleString('en-GB')} · Job ${j.id}</p>
+            </div>
+            <button onclick="pickJobAndShow('${j.id}')" style="background:#0bb4aa;color:#fff;border:none;border-radius:7px;padding:6px 16px;font-size:12px;font-weight:600;cursor:pointer">Load →</button>
+          </div>`).join('')
+        : '<p style="color:#aaa;font-size:13px">No completed crawl jobs found.</p>';
+    } catch { document.getElementById('picker-job-list').innerHTML='<p style="color:#aaa;font-size:13px">Could not load jobs — API offline.</p>'; }
+  }
+
+  async function pickJobAndShow(id) {
+    document.getElementById('state-picker').style.display = 'none';
+    document.getElementById('state-loading').style.display = '';
+    document.getElementById('state-loading').querySelector
+      ? document.getElementById('state-loading').textContent = 'Loading crawl data…'
+      : null;
+    await loadAndInit(id, null);
+  }
+
+  /* ── Init ── */
+  const params  = new URLSearchParams(location.search);
+  const jobParam = params.get('job');
+  const urlParam = params.get('url');
+  if (jobParam) {
+    loadAndInit(jobParam, urlParam || null);
+  } else {
+    loadJobList();
+  }
+</script>
+</body>
+</html>

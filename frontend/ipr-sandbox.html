@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>IPR Sandbox — Amazing Tools</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script>tailwind.config={theme:{extend:{fontFamily:{sans:['Inter','sans-serif']}}}}</script>
+  <style>
+    *{font-family:'Inter',sans-serif}
+    body{background:#f8fafc;color:#101010}
+    .nav-link{color:#555;font-size:14px;font-weight:500;transition:color .15s;text-decoration:none}
+    .nav-link:hover,.nav-link.active{color:#0bb4aa}
+    .logout-btn{background:none;border:1px solid #e2e8f0;color:#555;padding:6px 14px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer}
+    .logout-btn:hover{border-color:#0bb4aa;color:#0bb4aa}
+    .card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+    th{text-align:left;padding:9px 14px;background:#f8fafc;color:#888;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #e2e8f0}
+    td{padding:8px 14px;border-bottom:1px solid #f1f5f9;font-size:13px;vertical-align:middle}
+    tr:last-child td{border-bottom:none}
+    tr:hover td{background:#fafcff}
+  </style>
+</head>
+<body class="min-h-screen">
+
+<nav style="background:#fff;border-bottom:1px solid #e2e8f0;position:sticky;top:0;z-index:50">
+  <div class="max-w-7xl mx-auto px-6 flex items-center justify-between" style="height:60px">
+    <a href="dashboard.html" style="font-weight:800;font-size:18px;color:#101010;text-decoration:none;letter-spacing:-0.5px">
+      Amazing <span style="color:#0bb4aa">Tools</span>
+    </a>
+    <div class="flex items-center gap-6">
+      <a href="seo-crawler.html" class="nav-link">SEO Crawler</a>
+      <a href="query-match.html" class="nav-link">QueryMatch</a>
+      <a href="ipr-sandbox.html" class="nav-link active" style="color:#0bb4aa">IPR Sandbox</a>
+      <button class="logout-btn" onclick="logout()">Log out</button>
+    </div>
+  </div>
+</nav>
+
+<!-- Hero -->
+<div style="background:linear-gradient(135deg,#f0fdfc 0%,#fff 60%);border-bottom:1px solid #e2e8f0;padding:32px 0 24px">
+  <div class="max-w-7xl mx-auto px-6">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+      <a href="dashboard.html" style="font-size:12px;color:#aaa;text-decoration:none">← Dashboard</a>
+    </div>
+    <h1 style="font-size:1.6rem;font-weight:800;color:#101010;letter-spacing:-0.5px;margin-bottom:6px">IPR Sandbox</h1>
+    <p style="color:#666;font-size:14px;max-width:560px">Visualise and experiment with your internal link structure. Add or remove links between pages and see how Internal PageRank scores change in real time.</p>
+  </div>
+</div>
+
+<!-- Main -->
+<div class="max-w-7xl mx-auto px-6 py-8">
+
+  <!-- Job picker -->
+  <div id="job-picker" class="card" style="padding:28px;margin-bottom:24px">
+    <p style="font-size:13px;font-weight:700;color:#101010;margin:0 0 14px">Select a crawl job</p>
+    <div id="job-list-loading" style="color:#aaa;font-size:13px">Loading jobs…</div>
+    <div id="job-list" style="display:none;display:flex;flex-direction:column;gap:8px"></div>
+  </div>
+
+  <!-- Sandbox container (hidden until job loaded) -->
+  <div id="sandbox-wrap" style="display:none">
+    <div class="card" style="overflow:hidden">
+      <!-- Toolbar -->
+      <div style="padding:14px 20px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+        <div>
+          <p id="sb-domain-label" style="font-size:13px;font-weight:700;color:#101010;margin:0"></p>
+          <p style="font-size:11px;color:#aaa;margin:4px 0 0">Node size = IPR score · Green arrows = inbound · Teal = outbound · Click node to select</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button onclick="setView('graph')" id="v-graph" style="background:#101010;color:#fff;border:none;border-radius:7px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer">Graph</button>
+          <button onclick="setView('table')" id="v-table" style="background:#f1f5f9;color:#555;border:1px solid #e2e8f0;border-radius:7px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer">Table</button>
+          <button onclick="sandboxReset()" style="background:#fef2f2;border:1px solid #fecaca;color:#dc2626;border-radius:7px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer">↺ Reset</button>
+          <a id="open-results-link" href="#" style="background:#f0fdfc;border:1px solid #b2ede9;color:#0bb4aa;border-radius:7px;padding:5px 14px;font-size:12px;font-weight:600;text-decoration:none">← Back to results</a>
+        </div>
+      </div>
+
+      <!-- Graph + Panel split -->
+      <div id="view-graph" style="display:grid;grid-template-columns:1fr 300px;min-height:480px;border-bottom:1px solid #f1f5f9">
+        <div style="position:relative;border-right:1px solid #f1f5f9">
+          <div id="sb-graph" style="width:100%;height:480px;background:#f8fafc;overflow:hidden;position:relative"></div>
+          <div style="position:absolute;bottom:10px;left:12px;font-size:10px;color:#aaa">Drag · Scroll to zoom</div>
+          <div style="position:absolute;top:10px;left:12px;font-size:10px;font-weight:600;display:flex;gap:10px">
+            <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:2px;background:#059669;display:inline-block"></span>Inbound</span>
+            <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:2px;background:#0bb4aa;display:inline-block"></span>Outbound</span>
+          </div>
+        </div>
+        <div id="sb-panel" style="padding:16px;overflow-y:auto;max-height:480px;font-size:13px">
+          <p style="font-size:12px;color:#aaa;margin:0">Click any node to select it.</p>
+        </div>
+      </div>
+
+      <!-- Table view -->
+      <div id="view-table" style="display:none;overflow-x:auto;border-bottom:1px solid #f1f5f9">
+        <table style="width:100%">
+          <thead><tr>
+            <th style="min-width:260px">URL</th>
+            <th style="text-align:center">Original IPR</th>
+            <th style="text-align:center">Sandbox IPR</th>
+            <th style="text-align:center">Delta</th>
+          </tr></thead>
+          <tbody id="sb-tbody"></tbody>
+        </table>
+      </div>
+
+      <!-- Change badge bar -->
+      <div style="padding:12px 20px;display:flex;align-items:center;justify-content:space-between">
+        <span id="sb-change-badge"></span>
+        <a id="sim-page-link" href="#" style="font-size:12px;color:#0bb4aa;font-weight:600;text-decoration:none;display:none">Open Per-Page Simulator →</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const API_BASE = 'https://web-production-c14f30.up.railway.app';
+  if (!sessionStorage.getItem('at_auth')) window.location.href = 'login.html';
+  function logout() { sessionStorage.removeItem('at_auth'); window.location.href = 'login.html'; }
+  function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  /* ── Sandbox state ── */
+  let sbNodes=[], sbLinks=[], sbOrigLinks=[], sbIPR={}, sbOrigIPR={};
+  let sbSelectedId=null, sbSim=null, _sbGLinks=null, _sbGNodes=null, _sbUpdLinks=null;
+  let currentJobId=null, allPages=[];
+
+  function setView(v) {
+    document.getElementById('view-graph').style.display = v==='graph' ? 'grid' : 'none';
+    document.getElementById('view-table').style.display = v==='table' ? '' : 'none';
+    document.getElementById('v-graph').style.cssText = v==='graph'
+      ? 'background:#101010;color:#fff;border:none;border-radius:7px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer'
+      : 'background:#f1f5f9;color:#555;border:1px solid #e2e8f0;border-radius:7px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer';
+    document.getElementById('v-table').style.cssText = v==='table'
+      ? 'background:#101010;color:#fff;border:none;border-radius:7px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer'
+      : 'background:#f1f5f9;color:#555;border:1px solid #e2e8f0;border-radius:7px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer';
+  }
+
+  /* ── Client-side IPR (d=0.85, 50 iters) ── */
+  function sbComputePR(nodes, links) {
+    const d=0.85, it=50, N=nodes.length;
+    if (!N) return {};
+    const urls=nodes.map(n=>n.id), us=new Set(urls);
+    const out={}, inn={};
+    urls.forEach(u=>{out[u]=[];inn[u]=[];});
+    links.forEach(l=>{
+      const s=l.source?.id??l.source, t=l.target?.id??l.target;
+      if(us.has(s)&&us.has(t)&&s!==t&&!out[s].includes(t)){out[s].push(t);inn[t].push(s);}
+    });
+    let pr={}; urls.forEach(u=>pr[u]=1/N);
+    for(let i=0;i<it;i++){
+      const dg=urls.reduce((s,u)=>s+(out[u].length?0:pr[u]),0);
+      const np={};
+      urls.forEach(u=>{
+        let ri=dg/N;
+        inn[u].forEach(s=>{if(out[s].length)ri+=pr[s]/out[s].length;});
+        np[u]=(1-d)/N+d*ri;
+      });
+      pr=np;
+    }
+    const mx=Math.max(...Object.values(pr),1e-9);
+    const norm={}; urls.forEach(u=>norm[u]=pr[u]*10/mx);
+    return norm;
+  }
+
+  function initSandbox(pages, jobId) {
+    currentJobId = jobId;
+    allPages = pages;
+    const hasLinks = pages.some(p=>p.internal_links?.length);
+    if (!hasLinks) {
+      document.getElementById('sb-graph').innerHTML='<p style="padding:24px;color:#aaa;font-size:13px">No internal link data. Re-crawl with <strong>Calculate IPR</strong> enabled.</p>';
+      document.getElementById('sandbox-wrap').style.display='';
+      return;
+    }
+    const top=[...pages].sort((a,b)=>(b.ipr||0)-(a.ipr||0)).slice(0,100);
+    const us=new Set(top.map(p=>p.url));
+    sbNodes=top.map(p=>({id:p.url,label:p.url.replace(/^https?:\/\/[^/]+/,'')||'/',status:p.status_code||200}));
+    sbOrigLinks=[];
+    top.forEach(p=>(p.internal_links||[]).forEach(t=>{
+      if(us.has(t)&&t!==p.url) sbOrigLinks.push({source:p.url,target:t});
+    }));
+    sbLinks=sbOrigLinks.map(l=>({...l}));
+    top.forEach(p=>{sbOrigIPR[p.url]=p.ipr||0;});
+    sbIPR=sbComputePR(sbNodes,sbLinks);
+
+    const domain = top[0] ? new URL(top[0].id).hostname : '';
+    document.getElementById('sb-domain-label').textContent = domain + ` — ${top.length} pages loaded`;
+    document.getElementById('open-results-link').href = `results.html?job=${jobId}`;
+    document.getElementById('sandbox-wrap').style.display='';
+    renderSandboxD3();
+    renderSandboxTable();
+  }
+
+  function renderSandboxD3() {
+    const container=document.getElementById('sb-graph');
+    container.innerHTML='';
+    const W=container.clientWidth||700, H=480;
+    const mxIPR=()=>Math.max(...Object.values(sbIPR),0.001);
+    const nr=d=>5+(sbIPR[d.id]||0)/mxIPR()*18;
+    const nc=c=>{const v=parseInt(c);return v===200?'#059669':v<400?'#0bb4aa':v<500?'#dc2626':'#7c3aed';};
+    const svg=d3.select(container).append('svg').attr('width','100%').attr('height',H);
+    const defs=svg.append('defs');
+    [['sb-arr','#cbd5e1'],['sb-in','#059669'],['sb-out','#0bb4aa']].forEach(([id,col])=>{
+      defs.append('marker').attr('id',id).attr('viewBox','0 -5 10 10')
+        .attr('refX',22).attr('refY',0).attr('markerWidth',4).attr('markerHeight',4)
+        .attr('orient','auto').append('path').attr('d','M0,-5L10,0L0,5').attr('fill',col);
+    });
+    const g=svg.append('g');
+    svg.call(d3.zoom().scaleExtent([0.1,4]).on('zoom',ev=>g.attr('transform',ev.transform)));
+    sbSim=d3.forceSimulation(sbNodes)
+      .force('link',d3.forceLink(sbLinks).id(d=>d.id).distance(65).strength(0.28))
+      .force('charge',d3.forceManyBody().strength(-160))
+      .force('center',d3.forceCenter(W/2,H/2))
+      .force('col',d3.forceCollide().radius(d=>nr(d)+2));
+    _sbGLinks=g.append('g');
+    _sbUpdLinks=()=>{
+      _sbGLinks.selectAll('line').data(sbLinks,l=>{const s=l.source?.id??l.source,t=l.target?.id??l.target;return `${s}→${t}`;}).join('line')
+        .attr('stroke',l=>{const s=l.source?.id??l.source,t=l.target?.id??l.target;if(!sbSelectedId)return '#dde2e8';if(t===sbSelectedId)return '#059669';if(s===sbSelectedId)return '#0bb4aa';return '#edf0f4';})
+        .attr('stroke-width',l=>{const s=l.source?.id??l.source,t=l.target?.id??l.target;return(!sbSelectedId||s===sbSelectedId||t===sbSelectedId)?(!sbSelectedId?1:2):0.6;})
+        .attr('stroke-opacity',l=>{const s=l.source?.id??l.source,t=l.target?.id??l.target;return(!sbSelectedId)?0.55:(s===sbSelectedId||t===sbSelectedId)?1:0.15;})
+        .attr('marker-end',l=>{const s=l.source?.id??l.source,t=l.target?.id??l.target;if(t===sbSelectedId)return 'url(#sb-in)';if(s===sbSelectedId)return 'url(#sb-out)';return 'url(#sb-arr)';});
+    };
+    _sbUpdLinks();
+    const drag=d3.drag()
+      .on('start',(ev,d)=>{if(!ev.active)sbSim.alphaTarget(0.3).restart();d.fx=d.x;d.fy=d.y;})
+      .on('drag',(ev,d)=>{d.fx=ev.x;d.fy=ev.y;})
+      .on('end',(ev,d)=>{if(!ev.active)sbSim.alphaTarget(0);d.fx=null;d.fy=null;});
+    _sbGNodes=g.append('g');
+    const ng=_sbGNodes.selectAll('g').data(sbNodes).join('g').call(drag).style('cursor','pointer')
+      .on('click',(ev,d)=>{ev.stopPropagation();sandboxSelectNode(d.id);});
+    ng.append('circle').attr('r',nr).attr('fill',d=>nc(d.status))
+      .attr('fill-opacity',d=>sbSelectedId&&d.id!==sbSelectedId?0.3:0.85)
+      .attr('stroke',d=>d.id===sbSelectedId?'#101010':'#fff')
+      .attr('stroke-width',d=>d.id===sbSelectedId?2.5:1.5);
+    const tip=d3.select(container).append('div')
+      .style('position','absolute').style('background','#1e293b').style('color','#f1f5f9')
+      .style('padding','6px 10px').style('border-radius','7px').style('font-size','11px')
+      .style('pointer-events','none').style('display','none').style('z-index','10').style('max-width','220px').style('line-height','1.5');
+    ng.on('mouseover',(ev,d)=>{
+      tip.style('display','block').html(`<strong>${esc(d.label||'/')}</strong><br>Sandbox: ${(sbIPR[d.id]||0).toFixed(3)} · Orig: ${(sbOrigIPR[d.id]||0).toFixed(3)}`);
+    }).on('mousemove',ev=>{
+      const rc=container.getBoundingClientRect();
+      tip.style('left',(ev.clientX-rc.left+10)+'px').style('top',(ev.clientY-rc.top-28)+'px');
+    }).on('mouseout',()=>tip.style('display','none'));
+    sbSim.on('tick',()=>{
+      _sbGLinks.selectAll('line').attr('x1',d=>d.source.x).attr('y1',d=>d.source.y).attr('x2',d=>d.target.x).attr('y2',d=>d.target.y);
+      _sbGNodes.selectAll('g').attr('transform',d=>`translate(${d.x},${d.y})`);
+    });
+  }
+
+  function sandboxSelectNode(url) {
+    sbSelectedId=url;
+    if(_sbGNodes){_sbGNodes.selectAll('circle').attr('fill-opacity',d=>d.id!==url?0.3:0.85).attr('stroke',d=>d.id===url?'#101010':'#fff').attr('stroke-width',d=>d.id===url?2.5:1.5);}
+    if(_sbUpdLinks)_sbUpdLinks();
+    renderSandboxPanel();
+    renderSandboxTable();
+    /* Surface the per-page simulator link */
+    const lnk=document.getElementById('sim-page-link');
+    lnk.href=`page-sim.html?job=${currentJobId}&url=${encodeURIComponent(url)}`;
+    lnk.style.display='';
+  }
+
+  function sbRefresh(){
+    sbIPR=sbComputePR(sbNodes,sbLinks);
+    if(_sbGNodes){const mx=Math.max(...Object.values(sbIPR),0.001);_sbGNodes.selectAll('circle').attr('r',d=>5+(sbIPR[d.id]||0)/mx*18);}
+    if(_sbUpdLinks){sbSim.force('link',d3.forceLink(sbLinks).id(d=>d.id).distance(65).strength(0.28));_sbUpdLinks();sbSim.alphaTarget(0.3).restart();setTimeout(()=>sbSim.alphaTarget(0),1400);}
+    renderSandboxPanel();renderSandboxTable();
+  }
+
+  function sandboxRemoveLink(src,dst){sbLinks=sbLinks.filter(l=>{const s=l.source?.id??l.source,t=l.target?.id??l.target;return!(s===src&&t===dst);});sbRefresh();}
+  function sandboxAddLink(src,dst){if(!src||!dst||src===dst)return;if(!sbLinks.some(l=>{const s=l.source?.id??l.source,t=l.target?.id??l.target;return s===src&&t===dst;})){sbLinks.push({source:src,target:dst});}sbRefresh();}
+  function sandboxReset(){sbLinks=sbOrigLinks.map(l=>({...l}));sbSelectedId=null;sbIPR=sbComputePR(sbNodes,sbLinks);renderSandboxD3();renderSandboxPanel();renderSandboxTable();}
+
+  function renderSandboxPanel(){
+    const panel=document.getElementById('sb-panel');
+    if(!sbSelectedId){panel.innerHTML='<p style="font-size:12px;color:#aaa;margin:0">Click any node to select it.</p>';return;}
+    const node=sbNodes.find(n=>n.id===sbSelectedId);if(!node)return;
+    const su=u=>u.replace(/^https?:\/\/[^/]+/,'')||'/';
+    const origS=sbOrigIPR[sbSelectedId]||0,sandS=sbIPR[sbSelectedId]||0,delta=sandS-origS;
+    const dc=delta>0.005?'#059669':delta<-0.005?'#dc2626':'#888';
+    const ds=delta>0.005?`▲ +${delta.toFixed(3)}`:delta<-0.005?`▼ ${delta.toFixed(3)}`:'─';
+    const inbound=[],outbound=[];
+    sbLinks.forEach(l=>{const s=l.source?.id??l.source,t=l.target?.id??l.target;if(t===sbSelectedId)inbound.push(s);if(s===sbSelectedId)outbound.push(t);});
+    const others=sbNodes.map(n=>n.id).filter(u=>u!==sbSelectedId);
+    const notIn=others.filter(u=>!inbound.includes(u)),notOut=others.filter(u=>!outbound.includes(u));
+    const rmBtn=(s,t)=>`<button onclick="sandboxRemoveLink('${s}','${t}')" style="background:#fef2f2;border:1px solid #fecaca;color:#dc2626;border-radius:4px;padding:1px 7px;font-size:10px;font-weight:700;cursor:pointer;flex-shrink:0">✕</button>`;
+    const linkRow=(url,rs,rt)=>`<div style="display:flex;align-items:center;gap:5px;margin-bottom:4px"><span style="font-size:11px;color:#333;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1" title="${esc(url)}">${esc(su(url))}</span>${rmBtn(rs,rt)}</div>`;
+    const selOpt=arr=>arr.map(u=>`<option value="${u}">${esc(su(u))}</option>`).join('');
+    panel.innerHTML=`
+      <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#aaa;margin:0 0 4px">Selected</p>
+      <p style="font-size:11px;font-weight:600;word-break:break-all;margin:0 0 10px">${esc(node.label)}</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px;text-align:center">
+          <div style="font-size:17px;font-weight:800;color:#555">${origS.toFixed(2)}</div>
+          <div style="font-size:9px;color:#aaa;font-weight:700;margin-top:1px">ORIGINAL</div>
+        </div>
+        <div style="background:#f0fdfc;border:1px solid #b2ede9;border-radius:8px;padding:8px;text-align:center">
+          <div style="font-size:17px;font-weight:800;color:#0bb4aa">${sandS.toFixed(2)}</div>
+          <div style="font-size:9px;color:#aaa;font-weight:700;margin-top:1px">SANDBOX</div>
+        </div>
+      </div>
+      <div style="text-align:center;margin-bottom:12px"><span style="font-size:13px;font-weight:700;color:${dc}">${ds}</span></div>
+      <a href="page-sim.html?job=${currentJobId}&url=${encodeURIComponent(sbSelectedId)}" style="display:block;text-align:center;background:#f0fdfc;border:1px solid #b2ede9;color:#0bb4aa;border-radius:7px;padding:6px;font-size:11px;font-weight:700;text-decoration:none;margin-bottom:12px">⚡ Open Page Simulator</a>
+      <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#059669;margin:0 0 5px">Inbound (${inbound.length})</p>
+      <div style="margin-bottom:10px">${inbound.length?inbound.map(s=>linkRow(s,s,sbSelectedId)).join(''):'<p style="font-size:11px;color:#aaa;margin:0">None</p>'}</div>
+      <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#0bb4aa;margin:0 0 5px">Outbound (${outbound.length})</p>
+      <div style="margin-bottom:12px">${outbound.length?outbound.map(t=>linkRow(t,sbSelectedId,t)).join(''):'<p style="font-size:11px;color:#aaa;margin:0">None</p>'}</div>
+      <div style="border-top:1px solid #f1f5f9;padding-top:10px">
+        <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#aaa;margin:0 0 7px">Add Link</p>
+        <div style="display:flex;gap:5px;margin-bottom:6px;align-items:center">
+          <span style="font-size:10px;font-weight:600;color:#059669;min-width:52px">Inbound</span>
+          <select id="sb-in-sel" style="flex:1;border:1px solid #e2e8f0;border-radius:6px;padding:3px 6px;font-size:10px;outline:none">${selOpt(notIn)}</select>
+          <button onclick="sandboxAddLink(document.getElementById('sb-in-sel').value,'${sbSelectedId}')" style="background:#059669;color:#fff;border:none;border-radius:5px;padding:3px 9px;font-size:10px;font-weight:700;cursor:pointer">Add</button>
+        </div>
+        <div style="display:flex;gap:5px;align-items:center">
+          <span style="font-size:10px;font-weight:600;color:#0bb4aa;min-width:52px">Outbound</span>
+          <select id="sb-out-sel" style="flex:1;border:1px solid #e2e8f0;border-radius:6px;padding:3px 6px;font-size:10px;outline:none">${selOpt(notOut)}</select>
+          <button onclick="sandboxAddLink('${sbSelectedId}',document.getElementById('sb-out-sel').value)" style="background:#0bb4aa;color:#fff;border:none;border-radius:5px;padding:3px 9px;font-size:10px;font-weight:700;cursor:pointer">Add</button>
+        </div>
+      </div>`;
+  }
+
+  function renderSandboxTable(){
+    const su=u=>u.replace(/^https?:\/\/[^/]+/,'')||'/';
+    const rows=[...sbNodes].sort((a,b)=>(sbIPR[b.id]||0)-(sbIPR[a.id]||0)).slice(0,30);
+    let changed=0;
+    document.getElementById('sb-tbody').innerHTML=rows.map(n=>{
+      const orig=sbOrigIPR[n.id]||0,sand=sbIPR[n.id]||0,delta=sand-orig;
+      const dc=delta>0.005?'#059669':delta<-0.005?'#dc2626':'#888';
+      const ds=delta>0.005?`▲ +${delta.toFixed(3)}`:delta<-0.005?`▼ ${delta.toFixed(3)}`:'—';
+      if(Math.abs(delta)>0.005)changed++;
+      return`<tr style="${n.id===sbSelectedId?'background:#f0fdfc':''};cursor:pointer" onclick="sandboxSelectNode('${n.id}')">
+        <td style="color:#0bb4aa;font-size:11px">${esc(su(n.id))}</td>
+        <td style="text-align:center;color:#888">${orig.toFixed(3)}</td>
+        <td style="text-align:center;font-weight:600;color:#0bb4aa">${sand.toFixed(3)}</td>
+        <td style="text-align:center;font-weight:600;color:${dc}">${ds}</td>
+      </tr>`;
+    }).join('');
+    const badge=document.getElementById('sb-change-badge');
+    if(badge)badge.innerHTML=changed?`<span style="background:#e6fdfb;color:#0bb4aa;border:1px solid #b2ede9;padding:1px 8px;border-radius:9999px;font-size:11px;font-weight:700">${changed} changed</span>`:'';
+  }
+
+  /* ── Job loading ── */
+  async function loadJob(jobId) {
+    const r = await fetch(`${API_BASE}/api/jobs/${jobId}`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const job = await r.json();
+    if (job.status !== 'done' || !job.results) throw new Error('Job not done or has no results');
+    const clientUrl = job.client_url;
+    const pages = job.results[clientUrl]?.pages || [];
+    initSandbox(pages, jobId);
+  }
+
+  async function loadJobList() {
+    try {
+      const r = await fetch(`${API_BASE}/api/jobs?limit=20`);
+      if (!r.ok) throw new Error();
+      const jobs = await r.json().then(j => j.filter(j => j.status === 'done'));
+      document.getElementById('job-list-loading').style.display = 'none';
+      if (!jobs.length) { document.getElementById('job-list-loading').style.display=''; document.getElementById('job-list-loading').textContent='No completed crawl jobs found.'; return; }
+      document.getElementById('job-list').style.display = 'flex';
+      document.getElementById('job-list').innerHTML = jobs.map(j => `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border:1px solid #e2e8f0;border-radius:8px;background:#fafcff">
+          <div>
+            <p style="font-size:13px;font-weight:600;color:#101010;margin:0">${esc(j.client_url)}</p>
+            <p style="font-size:11px;color:#aaa;margin:2px 0 0">${new Date(j.completed_at||j.created_at).toLocaleString('en-GB')} · Job ${j.id}</p>
+          </div>
+          <button onclick="pickJob('${j.id}')" style="background:#0bb4aa;color:#fff;border:none;border-radius:7px;padding:6px 16px;font-size:12px;font-weight:600;cursor:pointer">Load →</button>
+        </div>
+      `).join('');
+    } catch { document.getElementById('job-list-loading').textContent = 'Could not load jobs — API offline.'; }
+  }
+
+  async function pickJob(id) {
+    document.getElementById('job-list-loading').style.display = '';
+    document.getElementById('job-list-loading').textContent = 'Loading crawl data…';
+    document.getElementById('job-list').style.display = 'none';
+    try {
+      await loadJob(id);
+      document.getElementById('job-picker').style.display = 'none';
+    } catch(e) {
+      document.getElementById('job-list-loading').textContent = `Error: ${e.message}`;
+      document.getElementById('job-list').style.display = 'flex';
+    }
+  }
+
+  /* ── Init ── */
+  const params = new URLSearchParams(location.search);
+  const jobParam = params.get('job');
+  if (jobParam) {
+    pickJob(jobParam);
+  } else {
+    loadJobList();
+  }
+</script>
+</body>
+</html>

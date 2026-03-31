@@ -201,7 +201,7 @@
             <div style="display:flex;gap:8px">
               <button id="view-graph-btn"   onclick="setIPRView('graph')"   style="background:#101010;color:#fff;border:none;border-radius:7px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer">Graph</button>
               <button id="view-table-btn"   onclick="setIPRView('table')"   style="background:#f1f5f9;color:#555;border:1px solid #e2e8f0;border-radius:7px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer">Table</button>
-              <button id="view-sandbox-btn" onclick="setIPRView('sandbox')" style="background:#f1f5f9;color:#555;border:1px solid #e2e8f0;border-radius:7px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer">IPR Sandbox</button>
+              <a id="open-sandbox-btn" href="ipr-sandbox.html" style="background:#f1f5f9;color:#555;border:1px solid #e2e8f0;border-radius:7px;padding:5px 14px;font-size:12px;font-weight:600;text-decoration:none">↗ Open in Sandbox</a>
             </div>
           </div>
           <!-- Graph view -->
@@ -214,43 +214,6 @@
               <div style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:50%;background:#7c3aed;display:inline-block"></span>5xx</div>
             </div>
           </div>
-          <!-- Sandbox view -->
-          <div id="ipr-sandbox-wrap" style="display:none">
-            <div style="display:grid;grid-template-columns:1fr 300px;min-height:480px;border-bottom:1px solid #f1f5f9">
-              <!-- D3 sandbox graph -->
-              <div style="position:relative;border-right:1px solid #f1f5f9">
-                <div id="sb-graph" style="width:100%;height:480px;background:#f8fafc;overflow:hidden;position:relative"></div>
-                <div style="position:absolute;bottom:10px;left:12px;font-size:10px;color:#aaa">Click node to select · Drag to move · Scroll to zoom</div>
-                <div style="position:absolute;top:10px;left:12px;font-size:10px;font-weight:600;display:flex;gap:10px">
-                  <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:2px;background:#059669;display:inline-block"></span>Inbound</span>
-                  <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:2px;background:#0bb4aa;display:inline-block"></span>Outbound</span>
-                </div>
-              </div>
-              <!-- Right panel -->
-              <div id="sb-panel" style="padding:16px;overflow-y:auto;max-height:480px;font-size:13px">
-                <p style="font-size:12px;color:#aaa;margin:0">Click any node in the graph to select it.</p>
-              </div>
-            </div>
-            <!-- Comparison table -->
-            <div style="padding:16px 20px">
-              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-                <p style="font-size:13px;font-weight:700;color:#101010;margin:0">IPR: Original vs Sandbox <span id="sb-change-badge" style="margin-left:8px"></span></p>
-                <button onclick="sandboxReset()" style="background:#fef2f2;border:1px solid #fecaca;color:#dc2626;border-radius:7px;padding:4px 14px;font-size:12px;font-weight:600;cursor:pointer">↺ Reset all</button>
-              </div>
-              <div style="overflow-x:auto">
-                <table id="sb-table">
-                  <thead><tr>
-                    <th>URL</th>
-                    <th style="text-align:center">Original</th>
-                    <th style="text-align:center">Sandbox</th>
-                    <th style="text-align:center">Delta</th>
-                  </tr></thead>
-                  <tbody id="sb-tbody"></tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-
           <!-- Table view -->
           <div id="ipr-table-wrap" style="overflow-x:auto;display:none">
             <table id="ipr-table">
@@ -260,6 +223,7 @@
                 <th style="text-align:center">Inbound</th>
                 <th style="text-align:center">Outbound</th>
                 <th style="min-width:160px">Equity Bar</th>
+                <th style="text-align:center">Simulate</th>
               </tr></thead>
               <tbody id="ipr-tbody"></tbody>
             </table>
@@ -286,6 +250,7 @@
                   <th>Noindex</th>
                   <th>Int. links</th>
                   <th>Images/Alt</th>
+                  <th>Simulate</th>
                 </tr>
               </thead>
               <tbody id="pages-tbody"></tbody>
@@ -424,292 +389,14 @@
 
   /* ── IPR view toggle ── */
   function setIPRView(view) {
-    document.getElementById('ipr-graph-wrap').style.display   = view==='graph'   ? '' : 'none';
-    document.getElementById('ipr-table-wrap').style.display   = view==='table'   ? '' : 'none';
-    document.getElementById('ipr-sandbox-wrap').style.display = view==='sandbox' ? '' : 'none';
-    ['graph','table','sandbox'].forEach(v => {
+    document.getElementById('ipr-graph-wrap').style.display = view==='graph' ? '' : 'none';
+    document.getElementById('ipr-table-wrap').style.display = view==='table' ? '' : 'none';
+    ['graph','table'].forEach(v => {
       const b = document.getElementById(`view-${v}-btn`);
       b.style.background = v===view ? '#101010' : '#f1f5f9';
       b.style.color      = v===view ? '#fff'    : '#555';
       b.style.border     = v===view ? 'none'    : '1px solid #e2e8f0';
     });
-    if (view==='sandbox' && sbNodes.length===0 && allPagesData.length>0) initSandbox(allPagesData);
-  }
-
-  /* ── Sandbox state ── */
-  let sbNodes=[], sbLinks=[], sbOrigLinks=[], sbIPR={}, sbOrigIPR={};
-  let sbSelectedId=null, sbSim=null, _sbGLinks=null, _sbGNodes=null, _sbUpdLinks=null;
-
-  function sbComputePR(nodes, links) {
-    const d=0.85, it=50, N=nodes.length;
-    if (!N) return {};
-    const urls=nodes.map(n=>n.id), us=new Set(urls);
-    const out={}, inn={};
-    urls.forEach(u=>{out[u]=[];inn[u]=[];});
-    links.forEach(l=>{
-      const s=l.source?.id??l.source, t=l.target?.id??l.target;
-      if (us.has(s)&&us.has(t)&&s!==t&&!out[s].includes(t)){out[s].push(t);inn[t].push(s);}
-    });
-    let pr={}; urls.forEach(u=>pr[u]=1/N);
-    for (let i=0;i<it;i++){
-      const dg=urls.reduce((s,u)=>s+(out[u].length?0:pr[u]),0);
-      const np={};
-      urls.forEach(u=>{
-        let ri=dg/N;
-        inn[u].forEach(s=>{if(out[s].length)ri+=pr[s]/out[s].length;});
-        np[u]=(1-d)/N+d*ri;
-      });
-      pr=np;
-    }
-    const mx=Math.max(...Object.values(pr),1e-9);
-    const norm={}; urls.forEach(u=>norm[u]=pr[u]*10/mx);
-    return norm;
-  }
-
-  function initSandbox(pages) {
-    const hasLinks = pages.some(p=>p.internal_links?.length);
-    if (!hasLinks) {
-      document.getElementById('sb-graph').innerHTML=
-        '<p style="padding:20px;color:#aaa;font-size:13px">No link data. Re-crawl with <strong>Calculate IPR</strong> enabled.</p>';
-      return;
-    }
-    const top=[...pages].sort((a,b)=>(b.ipr||0)-(a.ipr||0)).slice(0,100);
-    const us=new Set(top.map(p=>p.url));
-    sbNodes=top.map(p=>({id:p.url,label:p.url.replace(/^https?:\/\/[^/]+/,'')||'/',status:p.status_code||200}));
-    sbOrigLinks=[];
-    top.forEach(p=>(p.internal_links||[]).forEach(t=>{
-      if(us.has(t)&&t!==p.url) sbOrigLinks.push({source:p.url,target:t});
-    }));
-    sbLinks=sbOrigLinks.map(l=>({...l}));
-    top.forEach(p=>{sbOrigIPR[p.url]=p.ipr||0;});
-    sbIPR=sbComputePR(sbNodes,sbLinks);
-    renderSandboxD3();
-    renderSandboxTable();
-  }
-
-  function renderSandboxD3() {
-    const container=document.getElementById('sb-graph');
-    container.innerHTML='';
-    const W=container.clientWidth||700, H=480;
-    const mxIPR=()=>Math.max(...Object.values(sbIPR),0.001);
-    const nr=d=>5+(sbIPR[d.id]||0)/mxIPR()*18;
-    const nc=c=>{const v=parseInt(c);return v===200?'#059669':v<400?'#0bb4aa':v<500?'#dc2626':'#7c3aed';};
-    const svg=d3.select(container).append('svg').attr('width','100%').attr('height',H);
-    const defs=svg.append('defs');
-    [['sb-arr','#cbd5e1'],['sb-in','#059669'],['sb-out','#0bb4aa']].forEach(([id,col])=>{
-      defs.append('marker').attr('id',id).attr('viewBox','0 -5 10 10')
-        .attr('refX',22).attr('refY',0).attr('markerWidth',4).attr('markerHeight',4)
-        .attr('orient','auto').append('path').attr('d','M0,-5L10,0L0,5').attr('fill',col);
-    });
-    const g=svg.append('g');
-    svg.call(d3.zoom().scaleExtent([0.1,4]).on('zoom',ev=>g.attr('transform',ev.transform)));
-    sbSim=d3.forceSimulation(sbNodes)
-      .force('link',d3.forceLink(sbLinks).id(d=>d.id).distance(65).strength(0.28))
-      .force('charge',d3.forceManyBody().strength(-160))
-      .force('center',d3.forceCenter(W/2,H/2))
-      .force('col',d3.forceCollide().radius(d=>nr(d)+2));
-    _sbGLinks=g.append('g');
-    _sbUpdLinks=()=>{
-      _sbGLinks.selectAll('line')
-        .data(sbLinks,l=>{const s=l.source?.id??l.source,t=l.target?.id??l.target;return `${s}→${t}`;})
-        .join('line')
-        .attr('stroke',l=>{
-          const s=l.source?.id??l.source,t=l.target?.id??l.target;
-          if(!sbSelectedId) return '#dde2e8';
-          if(t===sbSelectedId) return '#059669';
-          if(s===sbSelectedId) return '#0bb4aa';
-          return '#edf0f4';
-        })
-        .attr('stroke-width',l=>{
-          const s=l.source?.id??l.source,t=l.target?.id??l.target;
-          return (!sbSelectedId||s===sbSelectedId||t===sbSelectedId)?(!sbSelectedId?1:2):0.6;
-        })
-        .attr('stroke-opacity',l=>{
-          const s=l.source?.id??l.source,t=l.target?.id??l.target;
-          return (!sbSelectedId)?0.55:(s===sbSelectedId||t===sbSelectedId)?1:0.15;
-        })
-        .attr('marker-end',l=>{
-          const s=l.source?.id??l.source,t=l.target?.id??l.target;
-          if(t===sbSelectedId) return 'url(#sb-in)';
-          if(s===sbSelectedId) return 'url(#sb-out)';
-          return 'url(#sb-arr)';
-        });
-    };
-    _sbUpdLinks();
-    const drag=d3.drag()
-      .on('start',(ev,d)=>{if(!ev.active)sbSim.alphaTarget(0.3).restart();d.fx=d.x;d.fy=d.y;})
-      .on('drag', (ev,d)=>{d.fx=ev.x;d.fy=ev.y;})
-      .on('end',  (ev,d)=>{if(!ev.active)sbSim.alphaTarget(0);d.fx=null;d.fy=null;});
-    _sbGNodes=g.append('g');
-    const ng=_sbGNodes.selectAll('g').data(sbNodes).join('g')
-      .call(drag).style('cursor','pointer')
-      .on('click',(ev,d)=>{ev.stopPropagation();sandboxSelectNode(d.id);});
-    ng.append('circle')
-      .attr('r',nr)
-      .attr('fill',d=>nc(d.status))
-      .attr('fill-opacity',d=>sbSelectedId&&d.id!==sbSelectedId?0.3:0.85)
-      .attr('stroke',d=>d.id===sbSelectedId?'#101010':'#fff')
-      .attr('stroke-width',d=>d.id===sbSelectedId?2.5:1.5);
-    const tip=d3.select(container).append('div')
-      .style('position','absolute').style('background','#1e293b').style('color','#f1f5f9')
-      .style('padding','6px 10px').style('border-radius','7px').style('font-size','11px')
-      .style('pointer-events','none').style('display','none').style('z-index','10')
-      .style('max-width','220px').style('line-height','1.5');
-    ng.on('mouseover',(ev,d)=>{
-      tip.style('display','block')
-        .html(`<strong>${esc(d.label||'/')}</strong><br>Sandbox: ${(sbIPR[d.id]||0).toFixed(3)} &nbsp; Orig: ${(sbOrigIPR[d.id]||0).toFixed(3)}`);
-    }).on('mousemove',ev=>{
-      const rc=container.getBoundingClientRect();
-      tip.style('left',(ev.clientX-rc.left+10)+'px').style('top',(ev.clientY-rc.top-28)+'px');
-    }).on('mouseout',()=>tip.style('display','none'));
-    sbSim.on('tick',()=>{
-      _sbGLinks.selectAll('line')
-        .attr('x1',d=>d.source.x).attr('y1',d=>d.source.y)
-        .attr('x2',d=>d.target.x).attr('y2',d=>d.target.y);
-      _sbGNodes.selectAll('g').attr('transform',d=>`translate(${d.x},${d.y})`);
-    });
-  }
-
-  function sandboxSelectNode(url) {
-    sbSelectedId = url;
-    if (_sbGNodes) {
-      _sbGNodes.selectAll('circle')
-        .attr('fill-opacity', d => d.id!==url ? 0.3 : 0.85)
-        .attr('stroke', d => d.id===url ? '#101010' : '#fff')
-        .attr('stroke-width', d => d.id===url ? 2.5 : 1.5);
-    }
-    if (_sbUpdLinks) _sbUpdLinks();
-    renderSandboxPanel();
-    renderSandboxTable();
-  }
-
-  function sbRefresh() {
-    sbIPR = sbComputePR(sbNodes, sbLinks);
-    if (_sbGNodes) {
-      const mx = Math.max(...Object.values(sbIPR), 0.001);
-      _sbGNodes.selectAll('circle').attr('r', d => 5+(sbIPR[d.id]||0)/mx*18);
-    }
-    if (_sbUpdLinks) {
-      sbSim.force('link', d3.forceLink(sbLinks).id(d=>d.id).distance(65).strength(0.28));
-      _sbUpdLinks();
-      sbSim.alphaTarget(0.3).restart();
-      setTimeout(()=>sbSim.alphaTarget(0), 1400);
-    }
-    renderSandboxPanel();
-    renderSandboxTable();
-  }
-
-  function sandboxRemoveLink(src, dst) {
-    sbLinks = sbLinks.filter(l => {
-      const s=l.source?.id??l.source, t=l.target?.id??l.target;
-      return !(s===src && t===dst);
-    });
-    sbRefresh();
-  }
-
-  function sandboxAddLink(src, dst) {
-    if (!src||!dst||src===dst) return;
-    const exists = sbLinks.some(l => {
-      const s=l.source?.id??l.source, t=l.target?.id??l.target;
-      return s===src && t===dst;
-    });
-    if (exists) return;
-    sbLinks.push({source:src, target:dst});
-    sbRefresh();
-  }
-
-  function sandboxReset() {
-    sbLinks = sbOrigLinks.map(l=>({...l}));
-    sbSelectedId = null;
-    sbIPR = sbComputePR(sbNodes, sbLinks);
-    renderSandboxD3();
-    renderSandboxPanel();
-    renderSandboxTable();
-  }
-
-  function renderSandboxPanel() {
-    const panel = document.getElementById('sb-panel');
-    if (!sbSelectedId) {
-      panel.innerHTML='<p style="font-size:12px;color:#aaa;margin:0">Click any node to select it.</p>';
-      return;
-    }
-    const node = sbNodes.find(n=>n.id===sbSelectedId);
-    if (!node) return;
-    const su = u => u.replace(/^https?:\/\/[^/]+/,'')||'/';
-    const origS = sbOrigIPR[sbSelectedId]||0, sandS = sbIPR[sbSelectedId]||0;
-    const delta = sandS - origS;
-    const dc = delta>0.005?'#059669':delta<-0.005?'#dc2626':'#888';
-    const ds = delta>0.005?`▲ +${delta.toFixed(3)}`:delta<-0.005?`▼ ${delta.toFixed(3)}`:'─';
-    const inbound=[], outbound=[];
-    sbLinks.forEach(l=>{
-      const s=l.source?.id??l.source, t=l.target?.id??l.target;
-      if (t===sbSelectedId) inbound.push(s);
-      if (s===sbSelectedId) outbound.push(t);
-    });
-    const others = sbNodes.map(n=>n.id).filter(u=>u!==sbSelectedId);
-    const notIn  = others.filter(u=>!inbound.includes(u));
-    const notOut = others.filter(u=>!outbound.includes(u));
-    const rmBtn  = (s,t) => `<button onclick="sandboxRemoveLink('${s}','${t}')"
-      style="background:#fef2f2;border:1px solid #fecaca;color:#dc2626;border-radius:4px;padding:1px 7px;font-size:10px;font-weight:700;cursor:pointer;flex-shrink:0">✕</button>`;
-    const linkRow = (url,rs,rt) => `<div style="display:flex;align-items:center;gap:5px;margin-bottom:4px">
-      <span style="font-size:11px;color:#333;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1" title="${esc(url)}">${esc(su(url))}</span>${rmBtn(rs,rt)}</div>`;
-    const selOpt = (arr,id) => arr.map(u=>`<option value="${u}" title="${u}">${esc(su(u))}</option>`).join('');
-    panel.innerHTML = `
-      <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#aaa;margin:0 0 4px">Selected</p>
-      <p style="font-size:11px;font-weight:600;word-break:break-all;margin:0 0 12px">${esc(node.label)}</p>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px;text-align:center">
-          <div style="font-size:17px;font-weight:800;color:#555">${origS.toFixed(2)}</div>
-          <div style="font-size:9px;color:#aaa;font-weight:700;margin-top:1px">ORIGINAL</div>
-        </div>
-        <div style="background:#f0fdfc;border:1px solid #b2ede9;border-radius:8px;padding:8px;text-align:center">
-          <div style="font-size:17px;font-weight:800;color:#0bb4aa">${sandS.toFixed(2)}</div>
-          <div style="font-size:9px;color:#aaa;font-weight:700;margin-top:1px">SANDBOX</div>
-        </div>
-      </div>
-      <div style="text-align:center;margin-bottom:14px">
-        <span style="font-size:13px;font-weight:700;color:${dc}">${ds}</span>
-      </div>
-      <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#059669;margin:0 0 6px">Inbound (${inbound.length})</p>
-      <div style="margin-bottom:12px">${inbound.length?inbound.map(s=>linkRow(s,s,sbSelectedId)).join(''):'<p style="font-size:11px;color:#aaa;margin:0">None</p>'}</div>
-      <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#0bb4aa;margin:0 0 6px">Outbound (${outbound.length})</p>
-      <div style="margin-bottom:14px">${outbound.length?outbound.map(t=>linkRow(t,sbSelectedId,t)).join(''):'<p style="font-size:11px;color:#aaa;margin:0">None</p>'}</div>
-      <div style="border-top:1px solid #f1f5f9;padding-top:12px">
-        <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#aaa;margin:0 0 8px">Add Link</p>
-        <div style="display:flex;gap:5px;margin-bottom:6px;align-items:center">
-          <span style="font-size:10px;font-weight:600;color:#059669;min-width:52px">Inbound</span>
-          <select id="sb-in-sel" style="flex:1;border:1px solid #e2e8f0;border-radius:6px;padding:3px 6px;font-size:10px;outline:none">${selOpt(notIn)}</select>
-          <button onclick="sandboxAddLink(document.getElementById('sb-in-sel').value,'${sbSelectedId}')"
-            style="background:#059669;color:#fff;border:none;border-radius:5px;padding:3px 9px;font-size:10px;font-weight:700;cursor:pointer">Add</button>
-        </div>
-        <div style="display:flex;gap:5px;align-items:center">
-          <span style="font-size:10px;font-weight:600;color:#0bb4aa;min-width:52px">Outbound</span>
-          <select id="sb-out-sel" style="flex:1;border:1px solid #e2e8f0;border-radius:6px;padding:3px 6px;font-size:10px;outline:none">${selOpt(notOut)}</select>
-          <button onclick="sandboxAddLink('${sbSelectedId}',document.getElementById('sb-out-sel').value)"
-            style="background:#0bb4aa;color:#fff;border:none;border-radius:5px;padding:3px 9px;font-size:10px;font-weight:700;cursor:pointer">Add</button>
-        </div>
-      </div>`;
-  }
-
-  function renderSandboxTable() {
-    const su = u => u.replace(/^https?:\/\/[^/]+/,'')||'/';
-    const rows = [...sbNodes].sort((a,b)=>(sbIPR[b.id]||0)-(sbIPR[a.id]||0)).slice(0,25);
-    let changed = 0;
-    document.getElementById('sb-tbody').innerHTML = rows.map(n=>{
-      const orig=sbOrigIPR[n.id]||0, sand=sbIPR[n.id]||0, delta=sand-orig;
-      const dc=delta>0.005?'#059669':delta<-0.005?'#dc2626':'#888';
-      const ds=delta>0.005?`▲ +${delta.toFixed(3)}`:delta<-0.005?`▼ ${delta.toFixed(3)}`:'—';
-      if (Math.abs(delta)>0.005) changed++;
-      const sel = n.id===sbSelectedId;
-      return `<tr style="${sel?'background:#f0fdfc':''};cursor:pointer" onclick="sandboxSelectNode('${n.id}')">
-        <td style="color:#0bb4aa;font-size:11px">${esc(su(n.id))}</td>
-        <td style="text-align:center;color:#888">${orig.toFixed(3)}</td>
-        <td style="text-align:center;font-weight:600;color:#0bb4aa">${sand.toFixed(3)}</td>
-        <td style="text-align:center;font-weight:600;color:${dc}">${ds}</td>
-      </tr>`;
-    }).join('');
-    const badge = document.getElementById('sb-change-badge');
-    if (badge) badge.innerHTML = changed ? `<span style="background:#e6fdfb;color:#0bb4aa;border:1px solid #b2ede9;padding:1px 8px;border-radius:9999px;font-size:11px;font-weight:700">${changed} changed</span>` : '';
   }
 
   /* ── IPR rendering ── */
@@ -718,7 +405,8 @@
     if (!withIPR.length) return;
 
     document.getElementById('ipr-tab-btn').style.display = '';
-    sbNodes=[]; sbLinks=[]; sbOrigLinks=[]; sbIPR={}; sbOrigIPR={}; sbSelectedId=null;
+    const jobId = new URLSearchParams(location.search).get('job');
+    if (jobId) document.getElementById('open-sandbox-btn').href = `ipr-sandbox.html?job=${jobId}`;
 
     /* Table */
     const sorted = [...withIPR].sort((a, b) => b.ipr - a.ipr);
@@ -738,6 +426,10 @@
           <div style="background:#e2e8f0;border-radius:4px;height:8px;overflow:hidden">
             <div style="background:${barColor};height:100%;width:${barPct}%;border-radius:4px;transition:width .3s"></div>
           </div>
+        </td>
+        <td style="text-align:center">
+          <a href="page-sim.html?job=${new URLSearchParams(location.search).get('job')}&url=${encodeURIComponent(p.url)}" target="_blank"
+            style="background:#f0fdfc;border:1px solid #b2ede9;color:#0bb4aa;border-radius:6px;padding:3px 10px;font-size:11px;font-weight:600;text-decoration:none;white-space:nowrap">⚡ Simulate</a>
         </td>
       </tr>`;
     }).join('');
@@ -1143,6 +835,10 @@
         <td style="font-size:12px">${p.noindex ? `<span style="color:#b45309">noindex</span>` : `<span style="color:#aaa">—</span>`}</td>
         <td style="font-size:12px">${p.internal_links_count ?? '—'}</td>
         <td style="font-size:12px">${p.images_without_alt > 0 ? `<span style="color:#b45309">${p.images_without_alt}</span>` : `<span style="color:#059669">0</span>`}</td>
+        <td style="text-align:center">
+          <a href="page-sim.html?job=${new URLSearchParams(location.search).get('job')}&url=${encodeURIComponent(p.url)}" target="_blank"
+            style="background:#f0fdfc;border:1px solid #b2ede9;color:#0bb4aa;border-radius:6px;padding:2px 9px;font-size:11px;font-weight:600;text-decoration:none;white-space:nowrap">⚡</a>
+        </td>
       </tr>
     `).join('');
     document.getElementById('pages-count-label').textContent = `${pages.length} pages${pages.length > 200 ? ' (showing 200)' : ''}`;
@@ -1270,6 +966,14 @@
   }
 
   loadJob();
+
+  /* Per-page simulator moved to page-sim.html */
+
+  function openPageSim(url) {
+    const jobId = new URLSearchParams(location.search).get('job');
+    window.open(`page-sim.html?job=${jobId}&url=${encodeURIComponent(url)}`, '_blank');
+  }
+
 </script>
 </body>
 </html>
