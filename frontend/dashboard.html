@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Dashboard — Amazing Tools</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config={theme:{extend:{fontFamily:{sans:['Inter','sans-serif']}}}}</script>
+  <style>
+    *{font-family:'Inter',sans-serif}
+    body{background:#f8fafc;color:#101010}
+    .card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+    .nav-link{color:#555;font-size:14px;font-weight:500;transition:color .15s;text-decoration:none}
+    .nav-link:hover{color:#0bb4aa}
+    .tool-card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;box-shadow:0 2px 10px rgba(0,0,0,.06);padding:28px;transition:box-shadow .15s,transform .15s;cursor:pointer;text-decoration:none;display:block}
+    .tool-card:hover{box-shadow:0 6px 24px rgba(11,180,170,.12);transform:translateY(-2px);border-color:#b2ede9}
+    .tool-card.disabled{cursor:not-allowed;opacity:.55}
+    .tool-card.disabled:hover{box-shadow:0 2px 10px rgba(0,0,0,.06);transform:none;border-color:#e2e8f0}
+    .tool-icon{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:16px}
+    .icon-teal{background:#e6fdfb}
+    .icon-grey{background:#f1f5f9}
+    .badge-soon{background:#f1f5f9;color:#94a3b8;border:1px solid #e2e8f0;padding:2px 10px;border-radius:9999px;font-size:11px;font-weight:600}
+    .badge-active{background:#e6fdfb;color:#0bb4aa;border:1px solid #b2ede9;padding:2px 10px;border-radius:9999px;font-size:11px;font-weight:600}
+    .logout-btn{background:none;border:1px solid #e2e8f0;color:#555;padding:6px 14px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s}
+    .logout-btn:hover{border-color:#0bb4aa;color:#0bb4aa}
+  </style>
+</head>
+<body class="min-h-screen">
+
+<nav style="background:#fff;border-bottom:1px solid #e2e8f0;position:sticky;top:0;z-index:50">
+  <div class="max-w-7xl mx-auto px-6 flex items-center justify-between" style="height:60px">
+    <a href="dashboard.html" style="font-weight:800;font-size:18px;color:#101010;text-decoration:none;letter-spacing:-0.5px">
+      Amazing <span style="color:#0bb4aa">Tools</span>
+    </a>
+    <div class="flex items-center gap-6">
+      <a href="seo-crawler.html" class="nav-link">SEO Crawler</a>
+      <span class="nav-link" style="opacity:.4;cursor:not-allowed">QueryMatch</span>
+      <button class="logout-btn" onclick="logout()">Log out</button>
+    </div>
+  </div>
+</nav>
+
+<!-- Hero -->
+<div style="background:linear-gradient(135deg,#f0fdfc 0%,#fff 60%);border-bottom:1px solid #e2e8f0;padding:40px 0 32px">
+  <div class="max-w-7xl mx-auto px-6">
+    <h1 style="font-size:1.7rem;font-weight:800;color:#101010;letter-spacing:-0.5px;margin-bottom:8px">Dashboard</h1>
+    <p style="color:#666;font-size:14px">Select a tool to get started.</p>
+  </div>
+</div>
+
+<!-- Tools grid -->
+<div class="max-w-7xl mx-auto px-6 py-10">
+  <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#aaa;margin-bottom:16px">Available Tools</p>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px">
+
+    <!-- SEO Crawler (active) -->
+    <a href="seo-crawler.html" class="tool-card">
+      <div class="tool-icon icon-teal">🔍</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <h2 style="font-size:16px;font-weight:700;color:#101010;margin:0">SEO Crawler</h2>
+        <span class="badge-active">Active</span>
+      </div>
+      <p style="font-size:13px;color:#666;line-height:1.6;margin:0">
+        Crawl your website and up to 5 competitors. Get detailed technical SEO metrics: titles, H1s, meta descriptions, status codes, canonical tags, links, and more.
+      </p>
+      <div style="margin-top:16px;font-size:13px;font-weight:600;color:#0bb4aa">Open tool →</div>
+    </a>
+
+    <!-- QueryMatch (coming soon) -->
+    <div class="tool-card disabled">
+      <div class="tool-icon icon-grey">💬</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <h2 style="font-size:16px;font-weight:700;color:#101010;margin:0">QueryMatch</h2>
+        <span class="badge-soon">Coming soon</span>
+      </div>
+      <p style="font-size:13px;color:#666;line-height:1.6;margin:0">
+        AI-powered keyword and content matching tool. Identify gaps, cannibalization, and strategic query alignment opportunities across your content.
+      </p>
+      <div style="margin-top:16px;font-size:13px;font-weight:500;color:#aaa">In development</div>
+    </div>
+
+  </div>
+
+  <!-- Recent jobs quick-access -->
+  <div style="margin-top:48px">
+    <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#aaa;margin-bottom:16px">Recent Crawl Jobs</p>
+    <div class="card" id="recent-jobs-card">
+      <div id="recent-jobs-loading" style="padding:32px;text-align:center;color:#aaa;font-size:14px">Loading recent jobs…</div>
+      <div id="recent-jobs-empty" style="padding:32px;text-align:center;color:#aaa;font-size:14px;display:none">
+        No crawl jobs yet. <a href="seo-crawler.html" style="color:#0bb4aa;font-weight:600">Start your first crawl →</a>
+      </div>
+      <div id="recent-jobs-table" style="display:none;overflow:hidden">
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead>
+            <tr>
+              <th style="text-align:left;padding:10px 16px;background:#f8fafc;color:#888;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #e2e8f0">Client URL</th>
+              <th style="text-align:left;padding:10px 16px;background:#f8fafc;color:#888;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #e2e8f0">Competitors</th>
+              <th style="text-align:left;padding:10px 16px;background:#f8fafc;color:#888;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #e2e8f0">Status</th>
+              <th style="text-align:left;padding:10px 16px;background:#f8fafc;color:#888;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #e2e8f0">Created</th>
+              <th style="text-align:left;padding:10px 16px;background:#f8fafc;color:#888;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #e2e8f0"></th>
+            </tr>
+          </thead>
+          <tbody id="recent-jobs-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer style="border-top:1px solid #e2e8f0;padding:20px 0;margin-top:40px">
+  <div class="max-w-7xl mx-auto px-6" style="display:flex;justify-content:space-between;align-items:center">
+    <span style="font-size:12px;color:#aaa">Amazing Tools · davidvesterlund.com</span>
+    <span style="font-size:12px;color:#aaa">v1.0</span>
+  </div>
+</footer>
+
+<script>
+  const API_BASE = 'https://seo-crawler-api.up.railway.app';
+
+  /* Auth guard */
+  if (!sessionStorage.getItem('at_auth')) window.location.href = 'login.html';
+
+  function logout() {
+    sessionStorage.removeItem('at_auth');
+    window.location.href = 'login.html';
+  }
+
+  function statusBadge(status) {
+    const map = {
+      done:    ['#059669','#e6f9f0','#a7f3d0','✓ Done'],
+      running: ['#0bb4aa','#e6fdfb','#b2ede9','⟳ Running'],
+      pending: ['#b45309','#fffbeb','#fcd34d','… Pending'],
+      error:   ['#dc2626','#fef2f2','#fecaca','✗ Error'],
+    };
+    const [c,bg,br,label] = map[status] || ['#888','#f1f5f9','#e2e8f0',status];
+    return `<span style="background:${bg};color:${c};border:1px solid ${br};padding:2px 9px;border-radius:9999px;font-size:11px;font-weight:600">${label}</span>`;
+  }
+
+  async function loadRecentJobs() {
+    try {
+      const r = await fetch(`${API_BASE}/api/jobs?limit=5`);
+      if (!r.ok) throw new Error();
+      const jobs = await r.json();
+
+      document.getElementById('recent-jobs-loading').style.display = 'none';
+      if (!jobs.length) {
+        document.getElementById('recent-jobs-empty').style.display = 'block';
+        return;
+      }
+
+      const tbody = document.getElementById('recent-jobs-tbody');
+      tbody.innerHTML = jobs.map(j => `
+        <tr style="border-bottom:1px solid #f1f5f9">
+          <td style="padding:10px 16px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+            <a href="${j.client_url}" target="_blank" style="color:#101010;text-decoration:none;font-weight:500">${j.client_url}</a>
+          </td>
+          <td style="padding:10px 16px;color:#666">${j.competitor_count} URL${j.competitor_count !== 1 ? 's' : ''}</td>
+          <td style="padding:10px 16px">${statusBadge(j.status)}</td>
+          <td style="padding:10px 16px;color:#888;font-size:12px">${new Date(j.created_at).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}</td>
+          <td style="padding:10px 16px">
+            ${j.status === 'done'
+              ? `<a href="results.html?job=${j.id}" style="color:#0bb4aa;font-size:13px;font-weight:600;text-decoration:none">View results →</a>`
+              : `<span style="color:#aaa;font-size:12px">—</span>`}
+          </td>
+        </tr>
+      `).join('');
+      document.getElementById('recent-jobs-table').style.display = 'block';
+    } catch {
+      document.getElementById('recent-jobs-loading').textContent = 'Could not load recent jobs — API offline.';
+    }
+  }
+
+  loadRecentJobs();
+</script>
+</body>
+</html>

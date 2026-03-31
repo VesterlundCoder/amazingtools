@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Crawl Results — Amazing Tools</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config={theme:{extend:{fontFamily:{sans:['Inter','sans-serif']}}}}</script>
+  <style>
+    *{font-family:'Inter',sans-serif}
+    body{background:#f8fafc;color:#101010}
+    .card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+    .nav-link{color:#555;font-size:14px;font-weight:500;transition:color .15s;text-decoration:none}
+    .nav-link:hover,.nav-link.active{color:#0bb4aa}
+    .logout-btn{background:none;border:1px solid #e2e8f0;color:#555;padding:6px 14px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s}
+    .logout-btn:hover{border-color:#0bb4aa;color:#0bb4aa}
+    .section-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#aaa;margin-bottom:12px}
+    .tab-btn{padding:8px 18px;border:none;background:none;font-size:13px;font-weight:500;color:#888;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s}
+    .tab-btn.active{color:#0bb4aa;border-bottom-color:#0bb4aa;font-weight:600}
+    .tab-btn:hover{color:#0bb4aa}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    th{text-align:left;padding:9px 14px;background:#f8fafc;color:#888;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #e2e8f0}
+    td{padding:9px 14px;border-bottom:1px solid #f1f5f9;vertical-align:top}
+    tr:last-child td{border-bottom:none}
+    tr:hover td{background:#fafcff}
+    .metric-card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:20px 24px;text-align:center}
+    .metric-val{font-size:2rem;font-weight:800;color:#101010;letter-spacing:-1px}
+    .metric-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#aaa;margin-top:4px}
+    .issue-row-critical{background:#fff5f5}
+    .issue-row-high{background:#fffbf0}
+    .score-bar{height:8px;border-radius:4px;background:#e2e8f0;overflow:hidden}
+    .score-fill{height:100%;border-radius:4px;transition:width .4s}
+    code{background:#f0fdfc;color:#0bb4aa;padding:1px 5px;border-radius:4px;font-size:0.82em;border:1px solid #b2ede9}
+    a{color:#0bb4aa}
+    .url-tab{padding:7px 14px;border:1px solid #e2e8f0;border-radius:8px;font-size:12px;font-weight:500;color:#555;cursor:pointer;transition:all .15s;background:#fff;white-space:nowrap}
+    .url-tab.active{background:#0bb4aa;color:#fff;border-color:#0bb4aa}
+    .url-tab:hover:not(.active){border-color:#0bb4aa;color:#0bb4aa}
+  </style>
+</head>
+<body class="min-h-screen">
+
+<nav style="background:#fff;border-bottom:1px solid #e2e8f0;position:sticky;top:0;z-index:50">
+  <div class="max-w-7xl mx-auto px-6 flex items-center justify-between" style="height:60px">
+    <a href="dashboard.html" style="font-weight:800;font-size:18px;color:#101010;text-decoration:none;letter-spacing:-0.5px">
+      Amazing <span style="color:#0bb4aa">Tools</span>
+    </a>
+    <div class="flex items-center gap-6">
+      <a href="seo-crawler.html" class="nav-link active" style="color:#0bb4aa">SEO Crawler</a>
+      <span class="nav-link" style="opacity:.4;cursor:not-allowed">QueryMatch</span>
+      <button class="logout-btn" onclick="logout()">Log out</button>
+    </div>
+  </div>
+</nav>
+
+<!-- Loading / error states -->
+<div id="state-loading" style="text-align:center;padding:80px 20px;color:#aaa;font-size:15px">
+  Loading crawl results…
+</div>
+<div id="state-running" style="display:none;text-align:center;padding:80px 20px">
+  <div style="font-size:2.5rem;margin-bottom:16px">⟳</div>
+  <p style="font-size:16px;font-weight:600;color:#101010;margin-bottom:8px">Crawl in progress</p>
+  <p style="font-size:14px;color:#666" id="running-progress">This may take a few minutes…</p>
+  <p style="font-size:12px;color:#aaa;margin-top:12px">Page will update automatically.</p>
+</div>
+<div id="state-error" style="display:none;text-align:center;padding:80px 20px">
+  <p style="font-size:16px;font-weight:600;color:#dc2626;margin-bottom:8px">Crawl failed</p>
+  <p id="error-detail" style="font-size:14px;color:#666"></p>
+  <a href="seo-crawler.html" style="color:#0bb4aa;font-size:14px;font-weight:600">← Back to Crawler</a>
+</div>
+
+<!-- Results content -->
+<div id="results-content" style="display:none">
+
+  <!-- Hero -->
+  <div style="background:linear-gradient(135deg,#f0fdfc 0%,#fff 60%);border-bottom:1px solid #e2e8f0;padding:32px 0 24px">
+    <div class="max-w-7xl mx-auto px-6">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px">
+        <div>
+          <a href="seo-crawler.html" style="font-size:12px;color:#888;text-decoration:none;font-weight:500">← Back to Crawler</a>
+          <h1 style="font-size:1.5rem;font-weight:800;color:#101010;letter-spacing:-0.5px;margin:6px 0 4px" id="results-title">Crawl Results</h1>
+          <p style="font-size:13px;color:#888" id="results-meta"></p>
+        </div>
+        <a href="#" id="export-btn" onclick="exportCSV()" style="background:#f1f5f9;border:1px solid #e2e8f0;color:#555;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:500;text-decoration:none">⬇ Export CSV</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="max-w-7xl mx-auto px-6 py-8">
+
+    <!-- URL selector tabs -->
+    <div style="margin-bottom:28px">
+      <p class="section-label">Select domain to inspect</p>
+      <div id="url-tabs" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+    </div>
+
+    <!-- Per-domain view -->
+    <div id="domain-view">
+
+      <!-- Scorecard row -->
+      <div id="scorecard" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:14px;margin-bottom:28px"></div>
+
+      <!-- Tabs for sections -->
+      <div class="card" style="overflow:hidden;margin-bottom:28px">
+        <div style="display:flex;border-bottom:1px solid #e2e8f0;overflow-x:auto;padding:0 4px">
+          <button class="tab-btn active" onclick="showSection('overview',this)">Overview</button>
+          <button class="tab-btn" onclick="showSection('onpage',this)">On-Page SEO</button>
+          <button class="tab-btn" onclick="showSection('links',this)">Links</button>
+          <button class="tab-btn" onclick="showSection('issues',this)">Issues <span id="issue-count-badge"></span></button>
+          <button class="tab-btn" onclick="showSection('pages',this)">All Pages</button>
+        </div>
+
+        <!-- Overview -->
+        <div id="section-overview" style="padding:24px">
+          <div id="overview-content"></div>
+        </div>
+
+        <!-- On-Page SEO -->
+        <div id="section-onpage" style="padding:24px;display:none">
+          <div id="onpage-content"></div>
+        </div>
+
+        <!-- Links -->
+        <div id="section-links" style="padding:24px;display:none">
+          <div id="links-content"></div>
+        </div>
+
+        <!-- Issues -->
+        <div id="section-issues" style="padding:24px;display:none">
+          <div id="issues-content"></div>
+        </div>
+
+        <!-- All pages -->
+        <div id="section-pages" style="padding:0;display:none">
+          <div style="padding:16px 24px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;gap:12px">
+            <input type="text" id="pages-search" placeholder="Filter URLs…" oninput="filterPages()"
+              style="border:1px solid #e2e8f0;border-radius:7px;padding:7px 12px;font-size:13px;outline:none;width:260px"/>
+            <span id="pages-count-label" style="font-size:12px;color:#aaa"></span>
+          </div>
+          <div id="pages-table-wrap" style="overflow-x:auto">
+            <table id="pages-table">
+              <thead>
+                <tr>
+                  <th style="min-width:280px">URL</th>
+                  <th>Status</th>
+                  <th>Title</th>
+                  <th>H1</th>
+                  <th>Meta Desc</th>
+                  <th>Canonical</th>
+                  <th>Noindex</th>
+                  <th>Int. links</th>
+                  <th>Images/Alt</th>
+                </tr>
+              </thead>
+              <tbody id="pages-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Competitor comparison -->
+      <div id="comparison-section" style="display:none">
+        <p class="section-label">Competitor comparison</p>
+        <div class="card" style="overflow:hidden">
+          <table id="comparison-table">
+            <thead>
+              <tr id="comparison-header"></tr>
+            </thead>
+            <tbody id="comparison-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<footer style="border-top:1px solid #e2e8f0;padding:20px 0;margin-top:20px">
+  <div class="max-w-7xl mx-auto px-6" style="display:flex;justify-content:space-between;align-items:center">
+    <span style="font-size:12px;color:#aaa">Amazing Tools · davidvesterlund.com</span>
+    <span style="font-size:12px;color:#aaa">v1.0</span>
+  </div>
+</footer>
+
+<script>
+  const API_BASE = 'https://seo-crawler-api.up.railway.app';
+
+  if (!sessionStorage.getItem('at_auth')) window.location.href = 'login.html';
+  function logout() { sessionStorage.removeItem('at_auth'); window.location.href = 'login.html'; }
+
+  const jobId = new URLSearchParams(location.search).get('job');
+  if (!jobId) { location.href = 'seo-crawler.html'; }
+
+  let jobData = null;
+  let currentDomain = null;
+  let allPagesData = [];
+
+  /* ── Section tabs ── */
+  function showSection(name, btn) {
+    ['overview','onpage','links','issues','pages'].forEach(s => {
+      document.getElementById(`section-${s}`).style.display = s === name ? '' : 'none';
+    });
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+
+  /* ── Status badge ── */
+  function statusBadge(code) {
+    const c = parseInt(code);
+    if (c === 200) return `<span style="color:#059669;font-weight:600">${code}</span>`;
+    if (c >= 300 && c < 400) return `<span style="color:#0bb4aa;font-weight:600">${code}</span>`;
+    if (c >= 400 && c < 500) return `<span style="color:#dc2626;font-weight:600">${code}</span>`;
+    if (c >= 500) return `<span style="color:#7c3aed;font-weight:600">${code}</span>`;
+    return `<span style="color:#888">${code || '?'}</span>`;
+  }
+
+  function tick(val) { return val ? `<span style="color:#059669">✓</span>` : `<span style="color:#dc2626">✗</span>`; }
+  function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  /* ── Build scorecard ── */
+  function buildScorecard(summary) {
+    const items = [
+      { val: summary.total_pages, label: 'Pages crawled', color: '#101010' },
+      { val: summary.pages_200,   label: 'Pages OK (2xx)', color: '#059669' },
+      { val: summary.pages_4xx + summary.pages_5xx, label: 'Error pages', color: summary.pages_4xx + summary.pages_5xx > 0 ? '#dc2626' : '#059669' },
+      { val: summary.missing_titles, label: 'Missing titles', color: summary.missing_titles > 0 ? '#b45309' : '#059669' },
+      { val: summary.missing_h1, label: 'Missing H1', color: summary.missing_h1 > 0 ? '#b45309' : '#059669' },
+      { val: summary.missing_meta_desc, label: 'No meta desc.', color: summary.missing_meta_desc > 0 ? '#b45309' : '#059669' },
+      { val: summary.broken_links, label: 'Broken links', color: summary.broken_links > 0 ? '#dc2626' : '#059669' },
+      { val: summary.images_without_alt, label: 'Images/no alt', color: summary.images_without_alt > 0 ? '#b45309' : '#059669' },
+    ];
+    return items.map(it => `
+      <div class="metric-card">
+        <div class="metric-val" style="color:${it.color}">${it.val}</div>
+        <div class="metric-label">${it.label}</div>
+      </div>
+    `).join('');
+  }
+
+  /* ── Build overview ── */
+  function buildOverview(data) {
+    const s = data.summary;
+    const statusRows = [
+      ['2xx (OK)', s.pages_200, '#059669'],
+      ['3xx (Redirects)', s.pages_3xx, '#0bb4aa'],
+      ['4xx (Client errors)', s.pages_4xx, '#dc2626'],
+      ['5xx (Server errors)', s.pages_5xx, '#7c3aed'],
+    ];
+    return `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+        <div>
+          <p style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#aaa;margin-bottom:12px">HTTP Status Distribution</p>
+          ${statusRows.map(([label, count, color]) => {
+            const pct = s.total_pages > 0 ? Math.round(count / s.total_pages * 100) : 0;
+            return `
+              <div style="margin-bottom:12px">
+                <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+                  <span style="font-size:13px;color:#555">${label}</span>
+                  <span style="font-size:13px;font-weight:600;color:${color}">${count} <span style="color:#aaa;font-weight:400">(${pct}%)</span></span>
+                </div>
+                <div class="score-bar"><div class="score-fill" style="width:${pct}%;background:${color}"></div></div>
+              </div>`;
+          }).join('')}
+        </div>
+        <div>
+          <p style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#aaa;margin-bottom:12px">On-Page Health</p>
+          ${[
+            ['Duplicate titles', s.duplicate_titles, '#b45309'],
+            ['Duplicate H1s', s.duplicate_h1, '#b45309'],
+            ['Long meta desc. (>160)', s.long_meta_desc||0, '#666'],
+            ['Short meta desc. (<70)', s.short_meta_desc||0, '#666'],
+            ['Noindex pages', s.noindex_count||0, '#b45309'],
+            ['Missing canonical', s.missing_canonical||0, '#666'],
+          ].map(([label,val,color]) => `
+            <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f1f5f9">
+              <span style="font-size:13px;color:#555">${label}</span>
+              <span style="font-size:13px;font-weight:600;color:${val > 0 ? color : '#059669'}">${val}</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  /* ── Build on-page section ── */
+  function buildOnPage(data) {
+    const pages = data.pages || [];
+    const missing_title = pages.filter(p => !p.title);
+    const dup_title = findDuplicates(pages.map(p => p.title).filter(Boolean));
+    const missing_h1 = pages.filter(p => !p.h1);
+    const short_desc = pages.filter(p => p.meta_description && p.meta_description.length < 70);
+    const long_desc  = pages.filter(p => p.meta_description && p.meta_description.length > 160);
+    const missing_desc = pages.filter(p => !p.meta_description);
+
+    function issueTable(pages, cols, title, color) {
+      if (!pages.length) return `<p style="color:#059669;font-size:13px;font-weight:500">✓ No issues found.</p>`;
+      return `
+        <div style="overflow-x:auto;border:1px solid #e2e8f0;border-radius:8px">
+          <table>
+            <thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead>
+            <tbody>${pages.slice(0,50).map(p => `
+              <tr>
+                <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                  <a href="${p.url}" target="_blank" style="color:#0bb4aa;font-size:12px">${esc(p.url)}</a>
+                </td>
+                ${cols.slice(1).map(c => {
+                  const key = c.toLowerCase().replace(/ /g,'_');
+                  return `<td style="max-width:280px">${esc(p[key]||p.title||p.h1||p.meta_description||'—')}</td>`;
+                }).join('')}
+              </tr>
+            `).join('')}</tbody>
+          </table>
+        </div>
+        ${pages.length > 50 ? `<p style="font-size:12px;color:#aaa;margin-top:6px">Showing 50 of ${pages.length}</p>` : ''}
+      `;
+    }
+
+    return `
+      <div style="display:flex;flex-direction:column;gap:28px">
+        <div>
+          <p style="font-size:13px;font-weight:700;color:#101010;margin-bottom:8px">Missing Title Tags <span style="color:#dc2626;font-size:12px">(${missing_title.length})</span></p>
+          ${missing_title.length ? buildUrlList(missing_title) : `<p style="color:#059669;font-size:13px;font-weight:500">✓ All pages have title tags.</p>`}
+        </div>
+        <div>
+          <p style="font-size:13px;font-weight:700;color:#101010;margin-bottom:8px">Duplicate Title Tags <span style="color:#b45309;font-size:12px">(${dup_title.length} groups)</span></p>
+          ${dup_title.length ? buildDupTable(dup_title) : `<p style="color:#059669;font-size:13px;font-weight:500">✓ No duplicate titles.</p>`}
+        </div>
+        <div>
+          <p style="font-size:13px;font-weight:700;color:#101010;margin-bottom:8px">Missing H1 <span style="color:#dc2626;font-size:12px">(${missing_h1.length})</span></p>
+          ${missing_h1.length ? buildUrlList(missing_h1) : `<p style="color:#059669;font-size:13px;font-weight:500">✓ All pages have H1.</p>`}
+        </div>
+        <div>
+          <p style="font-size:13px;font-weight:700;color:#101010;margin-bottom:8px">Missing Meta Description <span style="color:#b45309;font-size:12px">(${missing_desc.length})</span></p>
+          ${missing_desc.length ? buildUrlList(missing_desc) : `<p style="color:#059669;font-size:13px;font-weight:500">✓ All pages have meta descriptions.</p>`}
+        </div>
+        <div>
+          <p style="font-size:13px;font-weight:700;color:#101010;margin-bottom:8px">Meta Description Too Short &lt;70 chars <span style="color:#666;font-size:12px">(${short_desc.length})</span></p>
+          ${short_desc.length ? buildUrlList(short_desc) : `<p style="color:#059669;font-size:13px;font-weight:500">✓ None.</p>`}
+        </div>
+        <div>
+          <p style="font-size:13px;font-weight:700;color:#101010;margin-bottom:8px">Meta Description Too Long &gt;160 chars <span style="color:#666;font-size:12px">(${long_desc.length})</span></p>
+          ${long_desc.length ? buildUrlList(long_desc) : `<p style="color:#059669;font-size:13px;font-weight:500">✓ None.</p>`}
+        </div>
+      </div>
+    `;
+  }
+
+  function buildUrlList(pages) {
+    return `<div style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden">` +
+      pages.slice(0,50).map((p,i) => `
+        <div style="padding:8px 14px;border-bottom:${i < pages.length-1 && i < 49 ? '1px solid #f1f5f9' : 'none'};font-size:13px">
+          <a href="${p.url}" target="_blank" style="color:#0bb4aa">${esc(p.url)}</a>
+        </div>
+      `).join('') +
+      `</div>` +
+      (pages.length > 50 ? `<p style="font-size:12px;color:#aaa;margin-top:5px">Showing 50 of ${pages.length}</p>` : '');
+  }
+
+  function buildDupTable(groups) {
+    return `<div style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden">` +
+      groups.slice(0,20).map(([title,urls],i) => `
+        <div style="padding:10px 14px;border-bottom:1px solid #f1f5f9">
+          <p style="font-size:12px;font-weight:600;color:#101010;margin-bottom:4px">"${esc(title)}"</p>
+          ${urls.map(u => `<div style="font-size:12px;color:#0bb4aa"><a href="${u}" target="_blank">${esc(u)}</a></div>`).join('')}
+        </div>
+      `).join('') +
+      `</div>`;
+  }
+
+  function findDuplicates(arr) {
+    const counts = {};
+    arr.forEach(v => { counts[v] = (counts[v]||0)+1; });
+    return Object.entries(counts).filter(([,c])=>c>1).map(([v])=>[v,arr.filter(x=>x===v)]);
+  }
+
+  /* ── Build links section ── */
+  function buildLinks(data) {
+    const s = data.summary;
+    const broken = (data.pages||[]).filter(p => p.broken_links && p.broken_links.length);
+    return `
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-bottom:24px">
+        ${[
+          ['Total internal links', s.total_internal_links||0, '#101010'],
+          ['Total external links', s.total_external_links||0, '#101010'],
+          ['Broken links', s.broken_links, s.broken_links>0?'#dc2626':'#059669'],
+          ['Orphaned pages', s.orphaned_pages||0, s.orphaned_pages>0?'#b45309':'#059669'],
+        ].map(([label,val,color])=>`
+          <div class="metric-card">
+            <div class="metric-val" style="color:${color}">${val}</div>
+            <div class="metric-label">${label}</div>
+          </div>
+        `).join('')}
+      </div>
+      <p style="font-size:13px;font-weight:700;color:#101010;margin-bottom:10px">Pages with broken links <span style="color:#dc2626;font-size:12px">(${broken.length})</span></p>
+      ${broken.length ? `
+        <div style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden">
+          <table>
+            <thead><tr><th>Page</th><th>Broken URL</th><th>Status</th></tr></thead>
+            <tbody>${broken.slice(0,50).flatMap(p =>
+              (p.broken_links||[]).map(bl => `
+                <tr>
+                  <td><a href="${p.url}" target="_blank" style="color:#0bb4aa;font-size:12px">${esc(p.url)}</a></td>
+                  <td><a href="${bl.url}" target="_blank" style="color:#dc2626;font-size:12px">${esc(bl.url)}</a></td>
+                  <td>${statusBadge(bl.status)}</td>
+                </tr>
+              `)
+            ).join('')}</tbody>
+          </table>
+        </div>
+      ` : `<p style="color:#059669;font-size:13px;font-weight:500">✓ No broken links found.</p>`}
+    `;
+  }
+
+  /* ── Build issues list ── */
+  function buildIssues(data) {
+    const s = data.summary;
+    const issues = [];
+    if (s.pages_5xx > 0) issues.push({sev:'Critical', label:`${s.pages_5xx} server error page(s) (5xx)`, fix:'Investigate server logs and fix server-side errors immediately.'});
+    if (s.broken_links > 0) issues.push({sev:'Critical', label:`${s.broken_links} broken link(s) found`, fix:'Update or remove broken links to prevent crawl budget waste and poor UX.'});
+    if (s.pages_4xx > 0) issues.push({sev:'High', label:`${s.pages_4xx} client error page(s) (4xx)`, fix:'Set up proper 301 redirects for removed pages or fix internal links pointing to them.'});
+    if (s.missing_titles > 0) issues.push({sev:'High', label:`${s.missing_titles} page(s) missing title tag`, fix:'Add a unique, descriptive title (50–60 chars) to every page.'});
+    if (s.missing_h1 > 0) issues.push({sev:'High', label:`${s.missing_h1} page(s) missing H1`, fix:'Add exactly one H1 per page containing the primary keyword.'});
+    if (s.duplicate_titles > 0) issues.push({sev:'High', label:`${s.duplicate_titles} duplicate title tag(s)`, fix:'Make each page title unique to avoid keyword cannibalization.'});
+    if (s.missing_meta_desc > 0) issues.push({sev:'Medium', label:`${s.missing_meta_desc} page(s) missing meta description`, fix:'Write unique meta descriptions (120–160 chars) for all important pages.'});
+    if (s.images_without_alt > 0) issues.push({sev:'Medium', label:`${s.images_without_alt} image(s) missing alt text`, fix:'Add descriptive alt text to all meaningful images for accessibility and SEO.'});
+    if ((s.duplicate_h1||0) > 0) issues.push({sev:'Medium', label:`${s.duplicate_h1} duplicate H1 tag(s)`, fix:'Ensure each page has a unique H1.'});
+    if ((s.noindex_count||0) > 0) issues.push({sev:'Medium', label:`${s.noindex_count} page(s) with noindex directive`, fix:'Review noindex pages — confirm intentional exclusions.'});
+    if ((s.missing_canonical||0) > 0) issues.push({sev:'Low', label:`${s.missing_canonical} page(s) missing canonical tag`, fix:'Add self-referencing canonical tags to all pages.'});
+    if ((s.orphaned_pages||0) > 0) issues.push({sev:'Low', label:`${s.orphaned_pages} orphaned page(s) (no internal links)`, fix:'Add internal links to orphaned pages to improve crawlability.'});
+    if ((s.long_meta_desc||0) > 0) issues.push({sev:'Low', label:`${s.long_meta_desc} meta description(s) over 160 chars`, fix:'Trim meta descriptions to avoid truncation in search results.'});
+
+    document.getElementById('issue-count-badge').innerHTML =
+      issues.length ? `<span style="background:#fef2f2;color:#dc2626;border:1px solid #fecaca;padding:1px 7px;border-radius:9999px;font-size:10px;font-weight:700;margin-left:5px">${issues.length}</span>` : '';
+
+    const sevColor = {Critical:'#dc2626',High:'#b45309',Medium:'#0bb4aa',Low:'#888'};
+    const sevBg    = {Critical:'#fff5f5',High:'#fffbf0',Medium:'#f0fdfc',Low:'#f8fafc'};
+    if (!issues.length) return `<p style="color:#059669;font-size:14px;font-weight:500">✓ No significant issues found.</p>`;
+
+    return `
+      <div style="display:flex;flex-direction:column;gap:10px">
+        ${issues.map(i => `
+          <div style="padding:14px 18px;border-radius:8px;border:1px solid ${sevColor[i.sev]}20;background:${sevBg[i.sev]}">
+            <div style="display:flex;align-items:flex-start;gap:12px">
+              <span style="background:${sevColor[i.sev]};color:#fff;padding:2px 9px;border-radius:9999px;font-size:10px;font-weight:700;white-space:nowrap;margin-top:1px">${i.sev}</span>
+              <div>
+                <p style="font-size:13px;font-weight:600;color:#101010;margin:0 0 4px">${i.label}</p>
+                <p style="font-size:12px;color:#666;margin:0">💡 ${i.fix}</p>
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  /* ── Render domain ── */
+  function renderDomain(domain) {
+    currentDomain = domain;
+    const data = jobData.results[domain];
+    if (!data) return;
+
+    document.getElementById('scorecard').innerHTML = buildScorecard(data.summary);
+    document.getElementById('overview-content').innerHTML = buildOverview(data);
+    document.getElementById('onpage-content').innerHTML = buildOnPage(data);
+    document.getElementById('links-content').innerHTML = buildLinks(data);
+    document.getElementById('issues-content').innerHTML = buildIssues(data);
+
+    /* All pages table */
+    allPagesData = data.pages || [];
+    document.getElementById('pages-count-label').textContent = `${allPagesData.length} pages`;
+    renderPagesTable(allPagesData);
+
+    /* Comparison */
+    buildComparison();
+  }
+
+  function renderPagesTable(pages) {
+    document.getElementById('pages-tbody').innerHTML = pages.slice(0,200).map(p => `
+      <tr>
+        <td style="min-width:200px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+          <a href="${p.url}" target="_blank" style="color:#0bb4aa;font-size:12px">${esc(p.url)}</a>
+        </td>
+        <td>${statusBadge(p.status_code)}</td>
+        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px">${p.title ? esc(p.title) : '<span style="color:#dc2626">Missing</span>'}</td>
+        <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px">${p.h1 ? esc(p.h1) : '<span style="color:#dc2626">Missing</span>'}</td>
+        <td style="font-size:12px">${p.meta_description ? `<span title="${esc(p.meta_description)}">${p.meta_description.length} chars</span>` : '<span style="color:#b45309">Missing</span>'}</td>
+        <td style="font-size:12px">${p.canonical ? `<span style="color:#059669">✓</span>` : `<span style="color:#aaa">—</span>`}</td>
+        <td style="font-size:12px">${p.noindex ? `<span style="color:#b45309">noindex</span>` : `<span style="color:#aaa">—</span>`}</td>
+        <td style="font-size:12px">${p.internal_links_count ?? '—'}</td>
+        <td style="font-size:12px">${p.images_without_alt > 0 ? `<span style="color:#b45309">${p.images_without_alt}</span>` : `<span style="color:#059669">0</span>`}</td>
+      </tr>
+    `).join('');
+    document.getElementById('pages-count-label').textContent = `${pages.length} pages${pages.length > 200 ? ' (showing 200)' : ''}`;
+  }
+
+  function filterPages() {
+    const q = document.getElementById('pages-search').value.toLowerCase();
+    const filtered = allPagesData.filter(p => p.url.toLowerCase().includes(q));
+    renderPagesTable(filtered);
+  }
+
+  /* ── Competitor comparison ── */
+  function buildComparison() {
+    const domains = Object.keys(jobData.results);
+    if (domains.length < 2) { document.getElementById('comparison-section').style.display = 'none'; return; }
+
+    document.getElementById('comparison-section').style.display = '';
+
+    const metrics = [
+      ['Total pages crawled', d => d.summary.total_pages],
+      ['Pages with 2xx', d => d.summary.pages_200],
+      ['Pages with errors (4xx+5xx)', d => d.summary.pages_4xx + d.summary.pages_5xx],
+      ['Missing titles', d => d.summary.missing_titles],
+      ['Missing H1', d => d.summary.missing_h1],
+      ['Missing meta desc.', d => d.summary.missing_meta_desc],
+      ['Duplicate titles', d => d.summary.duplicate_titles],
+      ['Broken links', d => d.summary.broken_links],
+      ['Images without alt', d => d.summary.images_without_alt],
+    ];
+
+    const header = document.getElementById('comparison-header');
+    header.innerHTML = `<th>Metric</th>` + domains.map((d,i) => `
+      <th style="color:${i===0?'#0bb4aa':'#555'}">${i===0?'★ ':''}<span title="${d}">${new URL(d).hostname}</span></th>
+    `).join('');
+
+    const tbody = document.getElementById('comparison-tbody');
+    tbody.innerHTML = metrics.map(([label, fn]) => {
+      const vals = domains.map(d => {
+        try { return fn(jobData.results[d]); } catch { return '—'; }
+      });
+      return `<tr>
+        <td style="font-weight:500;color:#555">${label}</td>
+        ${vals.map((v,i) => `<td style="font-weight:${i===0?'600':'400'};color:${i===0?'#101010':'#666'}">${v}</td>`).join('')}
+      </tr>`;
+    }).join('');
+  }
+
+  /* ── URL tabs ── */
+  function buildUrlTabs() {
+    const domains = Object.keys(jobData.results);
+    document.getElementById('url-tabs').innerHTML = domains.map((d,i) => `
+      <button class="url-tab${i===0?' active':''}" onclick="selectDomain('${d}',this)">${i===0?'★ Client: ':''}<span title="${d}">${new URL(d).hostname}</span></button>
+    `).join('');
+    if (domains.length) renderDomain(domains[0]);
+  }
+
+  function selectDomain(domain, btn) {
+    document.querySelectorAll('.url-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderDomain(domain);
+  }
+
+  /* ── CSV export ── */
+  function exportCSV() {
+    if (!jobData || !currentDomain) return;
+    const data = jobData.results[currentDomain];
+    const rows = [['URL','Status','Title','Title Length','H1','Meta Description','Meta Desc Length','Canonical','Noindex','Internal Links','Images Without Alt']];
+    (data.pages||[]).forEach(p => rows.push([
+      p.url, p.status_code, p.title||'',
+      p.title ? p.title.length : '',
+      p.h1||'', p.meta_description||'',
+      p.meta_description ? p.meta_description.length : '',
+      p.canonical||'', p.noindex?'yes':'no',
+      p.internal_links_count??'', p.images_without_alt??''
+    ]));
+    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], {type:'text/csv'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `seo-crawl-${new URL(currentDomain).hostname}-${jobData.id}.csv`;
+    a.click();
+  }
+
+  /* ── Load job ── */
+  let pollTimer = null;
+  async function loadJob() {
+    try {
+      const r = await fetch(`${API_BASE}/api/jobs/${jobId}`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const job = await r.json();
+
+      if (job.status === 'running' || job.status === 'pending') {
+        document.getElementById('state-loading').style.display = 'none';
+        document.getElementById('state-running').style.display = 'block';
+        if (job.pages_crawled) document.getElementById('running-progress').textContent = `${job.pages_crawled} pages crawled so far…`;
+        if (!pollTimer) pollTimer = setInterval(loadJob, 5000);
+        return;
+      }
+
+      if (job.status === 'error') {
+        clearInterval(pollTimer);
+        document.getElementById('state-loading').style.display = 'none';
+        document.getElementById('state-error').style.display = 'block';
+        document.getElementById('error-detail').textContent = job.error_message || 'Unknown error.';
+        return;
+      }
+
+      /* Done */
+      clearInterval(pollTimer);
+      jobData = job;
+
+      document.getElementById('state-loading').style.display = 'none';
+      document.getElementById('state-running').style.display = 'none';
+      document.getElementById('results-content').style.display = 'block';
+
+      document.getElementById('results-title').textContent = `Results: ${new URL(job.client_url).hostname}`;
+      document.getElementById('results-meta').textContent =
+        `Job ${job.id} · Completed ${new Date(job.completed_at).toLocaleString('en-GB')} · ${Object.keys(job.results||{}).length} domain(s)`;
+
+      buildUrlTabs();
+
+    } catch(e) {
+      document.getElementById('state-loading').textContent = `Could not load job: ${e.message}`;
+    }
+  }
+
+  loadJob();
+</script>
+</body>
+</html>

@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>SEO Crawler — Amazing Tools</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config={theme:{extend:{fontFamily:{sans:['Inter','sans-serif']}}}}</script>
+  <style>
+    *{font-family:'Inter',sans-serif}
+    body{background:#f8fafc;color:#101010}
+    .card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+    .nav-link{color:#555;font-size:14px;font-weight:500;transition:color .15s;text-decoration:none}
+    .nav-link:hover,.nav-link.active{color:#0bb4aa}
+    label{font-size:12px;font-weight:600;color:#555;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:6px}
+    input[type=url],input[type=text]{width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;font-size:14px;outline:none;transition:border-color .15s,box-shadow .15s;background:#fff}
+    input[type=url]:focus,input[type=text]:focus{border-color:#0bb4aa;box-shadow:0 0 0 3px rgba(11,180,170,.10)}
+    .btn-primary{background:#0bb4aa;color:#fff;border:none;border-radius:8px;padding:11px 22px;font-size:14px;font-weight:600;cursor:pointer;transition:background .15s}
+    .btn-primary:hover{background:#099e94}
+    .btn-primary:disabled{background:#a7f3d0;cursor:not-allowed}
+    .btn-ghost{background:none;border:1px solid #e2e8f0;color:#555;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s}
+    .btn-ghost:hover{border-color:#0bb4aa;color:#0bb4aa}
+    .btn-remove{background:none;border:none;color:#aaa;cursor:pointer;padding:0 4px;font-size:18px;line-height:1;transition:color .15s}
+    .btn-remove:hover{color:#dc2626}
+    .section-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#aaa;margin-bottom:14px}
+    .logout-btn{background:none;border:1px solid #e2e8f0;color:#555;padding:6px 14px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s}
+    .logout-btn:hover{border-color:#0bb4aa;color:#0bb4aa}
+    th{text-align:left;padding:10px 16px;background:#f8fafc;color:#888;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #e2e8f0}
+    td{padding:10px 16px;border-bottom:1px solid #f1f5f9;font-size:13px;vertical-align:middle}
+    tr:last-child td{border-bottom:none}
+    tr:hover td{background:#fafcff}
+  </style>
+</head>
+<body class="min-h-screen">
+
+<nav style="background:#fff;border-bottom:1px solid #e2e8f0;position:sticky;top:0;z-index:50">
+  <div class="max-w-7xl mx-auto px-6 flex items-center justify-between" style="height:60px">
+    <a href="dashboard.html" style="font-weight:800;font-size:18px;color:#101010;text-decoration:none;letter-spacing:-0.5px">
+      Amazing <span style="color:#0bb4aa">Tools</span>
+    </a>
+    <div class="flex items-center gap-6">
+      <a href="seo-crawler.html" class="nav-link active" style="color:#0bb4aa">SEO Crawler</a>
+      <span class="nav-link" style="opacity:.4;cursor:not-allowed">QueryMatch</span>
+      <button class="logout-btn" onclick="logout()">Log out</button>
+    </div>
+  </div>
+</nav>
+
+<!-- Hero -->
+<div style="background:linear-gradient(135deg,#f0fdfc 0%,#fff 60%);border-bottom:1px solid #e2e8f0;padding:36px 0 28px">
+  <div class="max-w-4xl mx-auto px-6">
+    <h1 style="font-size:1.7rem;font-weight:800;color:#101010;letter-spacing:-0.5px;margin-bottom:8px">SEO Crawler</h1>
+    <p style="color:#666;font-size:14px;line-height:1.6">
+      Crawl your client's website alongside up to 5 competitors. Analyze titles, meta descriptions, H1s, status codes, canonical tags, internal links, and broken links.
+    </p>
+  </div>
+</div>
+
+<!-- Main form -->
+<div class="max-w-4xl mx-auto px-6 py-8">
+  <div class="card" style="padding:32px">
+    <p class="section-label">New crawl</p>
+
+    <!-- Client URL -->
+    <div style="margin-bottom:24px">
+      <label>Client URL <span style="color:#dc2626">*</span></label>
+      <input type="url" id="client-url" placeholder="https://yourclient.com" required/>
+      <p style="font-size:11px;color:#aaa;margin-top:5px">The website you are optimising. Must include https://</p>
+    </div>
+
+    <!-- Competitor URLs -->
+    <div style="margin-bottom:24px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <label style="margin:0">Competitor URLs</label>
+        <span style="font-size:11px;color:#aaa" id="comp-count-label">1 / 5 added</span>
+      </div>
+      <div id="competitor-list" style="display:flex;flex-direction:column;gap:10px">
+        <div class="comp-row" style="display:flex;align-items:center;gap:8px">
+          <input type="url" class="comp-input" placeholder="https://competitor1.com"/>
+          <button class="btn-remove" onclick="removeComp(this)" title="Remove">×</button>
+        </div>
+      </div>
+      <button class="btn-ghost" id="add-comp-btn" onclick="addCompetitor()" style="margin-top:12px;font-size:12px">
+        + Add competitor URL
+      </button>
+    </div>
+
+    <!-- Options -->
+    <div style="margin-bottom:28px;padding:16px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0">
+      <p style="font-size:12px;font-weight:600;color:#555;margin-bottom:12px">Crawl options</p>
+      <div style="display:flex;flex-wrap:wrap;gap:20px">
+        <div>
+          <label style="text-transform:none;font-size:12px;font-weight:500;color:#555;display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="number" id="max-pages" value="100" min="10" max="500" style="width:70px;padding:5px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;outline:none"/>
+            Max pages per domain
+          </label>
+        </div>
+        <div>
+          <label style="text-transform:none;font-size:12px;font-weight:500;color:#555;display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="check-externals" checked style="width:15px;height:15px;accent-color:#0bb4aa"/>
+            Check external links
+          </label>
+        </div>
+        <div>
+          <label style="text-transform:none;font-size:12px;font-weight:500;color:#555;display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="respect-robots" checked style="width:15px;height:15px;accent-color:#0bb4aa"/>
+            Respect robots.txt
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:14px">
+      <button class="btn-primary" id="start-btn" onclick="startCrawl()">🔍 Start SEO Crawl</button>
+      <span id="start-msg" style="font-size:13px;color:#0bb4aa;display:none;font-weight:500"></span>
+    </div>
+  </div>
+
+  <!-- Job history -->
+  <div style="margin-top:40px">
+    <p class="section-label">Crawl history</p>
+    <div class="card" style="overflow:hidden">
+      <div id="jobs-loading" style="padding:28px;text-align:center;color:#aaa;font-size:14px">Loading…</div>
+      <div id="jobs-empty" style="padding:28px;text-align:center;color:#aaa;font-size:14px;display:none">No crawl jobs yet.</div>
+      <table id="jobs-table" style="width:100%;border-collapse:collapse;display:none">
+        <thead>
+          <tr>
+            <th>Client URL</th>
+            <th>Competitors</th>
+            <th>Pages crawled</th>
+            <th>Status</th>
+            <th>Started</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="jobs-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<footer style="border-top:1px solid #e2e8f0;padding:20px 0;margin-top:20px">
+  <div class="max-w-7xl mx-auto px-6" style="display:flex;justify-content:space-between;align-items:center">
+    <span style="font-size:12px;color:#aaa">Amazing Tools · davidvesterlund.com</span>
+    <span style="font-size:12px;color:#aaa">v1.0</span>
+  </div>
+</footer>
+
+<script>
+  const API_BASE = 'https://seo-crawler-api.up.railway.app';
+
+  if (!sessionStorage.getItem('at_auth')) window.location.href = 'login.html';
+
+  function logout() { sessionStorage.removeItem('at_auth'); window.location.href = 'login.html'; }
+
+  /* Competitor rows */
+  function updateCompCount() {
+    const n = document.querySelectorAll('.comp-row').length;
+    document.getElementById('comp-count-label').textContent = `${n} / 5 added`;
+    document.getElementById('add-comp-btn').disabled = n >= 5;
+    document.getElementById('add-comp-btn').style.opacity = n >= 5 ? '0.4' : '1';
+  }
+
+  function addCompetitor() {
+    const list = document.getElementById('competitor-list');
+    if (list.querySelectorAll('.comp-row').length >= 5) return;
+    const row = document.createElement('div');
+    row.className = 'comp-row';
+    row.style.cssText = 'display:flex;align-items:center;gap:8px';
+    const n = list.querySelectorAll('.comp-row').length + 1;
+    row.innerHTML = `
+      <input type="url" class="comp-input" placeholder="https://competitor${n}.com" style="flex:1"/>
+      <button class="btn-remove" onclick="removeComp(this)" title="Remove">×</button>
+    `;
+    list.appendChild(row);
+    row.querySelector('input').focus();
+    updateCompCount();
+  }
+
+  function removeComp(btn) {
+    const list = document.getElementById('competitor-list');
+    if (list.querySelectorAll('.comp-row').length <= 1) {
+      btn.closest('.comp-row').querySelector('input').value = '';
+      return;
+    }
+    btn.closest('.comp-row').remove();
+    updateCompCount();
+  }
+
+  updateCompCount();
+
+  /* Start crawl */
+  async function startCrawl() {
+    const clientUrl = document.getElementById('client-url').value.trim();
+    if (!clientUrl) { alert('Please enter the client URL.'); return; }
+
+    const compInputs = [...document.querySelectorAll('.comp-input')]
+      .map(i => i.value.trim()).filter(Boolean);
+
+    const maxPages   = parseInt(document.getElementById('max-pages').value) || 100;
+    const checkExt   = document.getElementById('check-externals').checked;
+    const respRobots = document.getElementById('respect-robots').checked;
+
+    const btn = document.getElementById('start-btn');
+    const msg = document.getElementById('start-msg');
+    btn.disabled = true;
+    btn.textContent = '⟳ Starting crawl…';
+
+    try {
+      const r = await fetch(`${API_BASE}/api/crawl`, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          client_url:       clientUrl,
+          competitor_urls:  compInputs,
+          max_pages:        maxPages,
+          check_externals:  checkExt,
+          respect_robots:   respRobots
+        })
+      });
+
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${r.status}`);
+      }
+
+      const job = await r.json();
+      msg.textContent = `✓ Job started (ID: ${job.id})`;
+      msg.style.display = 'inline';
+      btn.textContent = '🔍 Start SEO Crawl';
+      btn.disabled = false;
+
+      document.getElementById('client-url').value = '';
+      document.querySelectorAll('.comp-input').forEach(i => i.value = '');
+
+      loadJobs();
+      startPolling(job.id);
+    } catch(e) {
+      alert(`Failed to start crawl: ${e.message}`);
+      btn.disabled = false;
+      btn.textContent = '🔍 Start SEO Crawl';
+    }
+  }
+
+  /* Polling */
+  const pollingTimers = {};
+  function startPolling(jobId) {
+    if (pollingTimers[jobId]) return;
+    pollingTimers[jobId] = setInterval(async () => {
+      try {
+        const r = await fetch(`${API_BASE}/api/jobs/${jobId}`);
+        const job = await r.json();
+        if (job.status === 'done' || job.status === 'error') {
+          clearInterval(pollingTimers[jobId]);
+          delete pollingTimers[jobId];
+        }
+        loadJobs();
+      } catch { /* silent */ }
+    }, 4000);
+  }
+
+  /* Status badge */
+  function statusBadge(status) {
+    const map = {
+      done:    ['#059669','#e6f9f0','#a7f3d0','✓ Done'],
+      running: ['#0bb4aa','#e6fdfb','#b2ede9','⟳ Running'],
+      pending: ['#b45309','#fffbeb','#fcd34d','… Pending'],
+      error:   ['#dc2626','#fef2f2','#fecaca','✗ Error'],
+    };
+    const [c,bg,br,label] = map[status] || ['#888','#f1f5f9','#e2e8f0',status];
+    return `<span style="background:${bg};color:${c};border:1px solid ${br};padding:2px 9px;border-radius:9999px;font-size:11px;font-weight:600">${label}</span>`;
+  }
+
+  /* Load job history */
+  async function loadJobs() {
+    try {
+      const r = await fetch(`${API_BASE}/api/jobs?limit=20`);
+      if (!r.ok) throw new Error();
+      const jobs = await r.json();
+
+      document.getElementById('jobs-loading').style.display = 'none';
+      if (!jobs.length) {
+        document.getElementById('jobs-empty').style.display = 'block';
+        document.getElementById('jobs-table').style.display = 'none';
+        return;
+      }
+
+      document.getElementById('jobs-empty').style.display = 'none';
+      document.getElementById('jobs-table').style.display = 'table';
+
+      document.getElementById('jobs-tbody').innerHTML = jobs.map(j => `
+        <tr>
+          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500">
+            <a href="${j.client_url}" target="_blank" style="color:#101010;text-decoration:none">${j.client_url}</a>
+          </td>
+          <td style="color:#666">${j.competitor_count}</td>
+          <td style="color:#666">${j.pages_crawled ?? '—'}</td>
+          <td>${statusBadge(j.status)}</td>
+          <td style="color:#888;font-size:12px">${new Date(j.created_at).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</td>
+          <td>
+            ${j.status === 'done'
+              ? `<a href="results.html?job=${j.id}" style="color:#0bb4aa;font-size:13px;font-weight:600;text-decoration:none">Results →</a>`
+              : j.status === 'running'
+                ? `<span style="color:#aaa;font-size:12px">Crawling…</span>`
+                : `<span style="color:#aaa;font-size:12px">—</span>`}
+          </td>
+        </tr>
+      `).join('');
+
+      /* Resume polling for running jobs */
+      jobs.filter(j => j.status === 'running' || j.status === 'pending')
+          .forEach(j => startPolling(j.id));
+
+    } catch {
+      document.getElementById('jobs-loading').textContent = 'API offline — results will appear once the backend is running.';
+    }
+  }
+
+  loadJobs();
+</script>
+</body>
+</html>

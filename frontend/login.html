@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Amazing Tools — Login</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config={theme:{extend:{fontFamily:{sans:['Inter','sans-serif']}}}}</script>
+  <style>
+    *{font-family:'Inter',sans-serif}
+    body{background:linear-gradient(135deg,#f0fdfc 0%,#f8fafc 100%);min-height:100vh;display:flex;align-items:center;justify-content:center}
+    .card{background:#fff;border:1px solid #e2e8f0;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,.08)}
+    input{width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;font-size:14px;outline:none;transition:border-color .15s,box-shadow .15s}
+    input:focus{border-color:#0bb4aa;box-shadow:0 0 0 3px rgba(11,180,170,.12)}
+    .btn-primary{background:#0bb4aa;color:#fff;border:none;border-radius:8px;padding:11px 0;width:100%;font-size:14px;font-weight:600;cursor:pointer;transition:background .15s,transform .1s}
+    .btn-primary:hover{background:#099e94}
+    .btn-primary:active{transform:scale(.98)}
+    .error-msg{color:#dc2626;font-size:13px;display:none;margin-top:8px}
+    label{font-size:12px;font-weight:600;color:#555;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:6px}
+  </style>
+</head>
+<body>
+  <div class="card" style="width:100%;max-width:400px;padding:48px 40px">
+    <div style="text-align:center;margin-bottom:36px">
+      <div style="font-size:26px;font-weight:800;color:#101010;letter-spacing:-0.5px;margin-bottom:6px">
+        Amazing <span style="color:#0bb4aa">Tools</span>
+      </div>
+      <p style="color:#888;font-size:13px">Sign in to access your tools</p>
+    </div>
+
+    <form id="login-form" onsubmit="handleLogin(event)">
+      <div style="margin-bottom:20px">
+        <label for="username">Username</label>
+        <input type="text" id="username" autocomplete="username" placeholder="Enter username" required/>
+      </div>
+      <div style="margin-bottom:24px">
+        <label for="password">Password</label>
+        <input type="password" id="password" autocomplete="current-password" placeholder="Enter password" required/>
+      </div>
+      <p class="error-msg" id="error-msg">Invalid username or password.</p>
+      <button type="submit" class="btn-primary" id="submit-btn">Sign In</button>
+    </form>
+
+    <p style="text-align:center;font-size:12px;color:#aaa;margin-top:28px">
+      davidvesterlund.com/amazingtools
+    </p>
+  </div>
+
+  <script>
+    /* Redirect if already authenticated */
+    if (sessionStorage.getItem('at_auth') === '1') {
+      window.location.href = 'dashboard.html';
+    }
+
+    function handleLogin(e) {
+      e.preventDefault();
+      const user = document.getElementById('username').value.trim();
+      const pass = document.getElementById('password').value;
+      const btn  = document.getElementById('submit-btn');
+      const err  = document.getElementById('error-msg');
+
+      btn.textContent = 'Signing in…';
+      btn.disabled = true;
+      err.style.display = 'none';
+
+      /* Slight delay for UX */
+      setTimeout(() => {
+        if (user === 'amazing' && pass === 'toTO33hhGG669bb') {
+          sessionStorage.setItem('at_auth', '1');
+          window.location.href = 'dashboard.html';
+        } else {
+          err.style.display = 'block';
+          btn.textContent = 'Sign In';
+          btn.disabled = false;
+          document.getElementById('password').value = '';
+          document.getElementById('password').focus();
+        }
+      }, 320);
+    }
+  </script>
+</body>
+</html>
