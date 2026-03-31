@@ -18,7 +18,6 @@ import sqlite3
 import threading
 import uuid
 from contextlib import asynccontextmanager
-from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -138,11 +137,8 @@ def run_crawl(job_id: str, client_url: str, competitor_urls: list[str],
             progress_callback= progress,
         )
 
-        # Serialise DomainResult dataclasses to JSON-safe dicts
-        results_dict = {}
-        for url, domain_result in results.items():
-            dr = asdict(domain_result)
-            results_dict[url] = dr
+        # results is already dict[url -> plain dict]
+        results_dict = results
 
         pages_total = sum(
             len(dr.get("pages", [])) for dr in results_dict.values()

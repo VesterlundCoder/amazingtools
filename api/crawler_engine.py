@@ -1,19 +1,42 @@
 """
 crawler_engine.py — SEO crawl engine.
 
-Crawls a domain up to max_pages deep (BFS), extracts technical SEO metrics
-per page, and returns a structured CrawlResult.
+Primary:  seotracker's async CrawlOrchestrator (httpx + BeautifulSoup + sitemap + robots)
+Fallback: basic synchronous requests-based BFS crawler.
 
-Replaces this with the VesterlundCoder/seo-crawler repo engine once available.
+crawl_multiple() returns dict[start_url -> domain_result_dict]:
+  {
+    "domain":  str,
+    "summary": {total_pages, pages_200, pages_4xx, missing_titles, ...},
+    "pages":   [{"url", "status_code", "title", "h1", "meta_description",
+                 "canonical", "noindex", "internal_links_count",
+                 "external_links_count", "images_without_alt", "broken_links",
+                 "word_count", "crawl_depth"}, ...]
+  }
 """
 
-import re
-import time
+import asyncio
 import logging
+import os
+import re
+import sys
+import time
 from collections import deque
-from dataclasses import dataclass, field
 from typing import Optional
 from urllib.parse import urljoin, urlparse, urldefrag
+
+# ── Try to load seotracker orchestrator ────────────────────────────────────
+_SEOTRACKER_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'seotracker')
+if os.path.isdir(_SEOTRACKER_DIR) and _SEOTRACKER_DIR not in sys.path:
+    sys.path.insert(0, _SEOTRACKER_DIR)
+
+try:
+    from app.crawler.orchestrator import CrawlOrchestrator   # type: ignore
+    _HAS_ORCHESTRATOR = True
+    logging.getLogger(__name__).info("Using seotracker CrawlOrchestrator engine.")
+except Exception as _e:
+    _HAS_ORCHESTRATOR = False
+    logging.getLogger(__name__).warning("seotracker not available (%s), using basic crawler.", _e)
 
 import requests
 from bs4 import BeautifulSoup
@@ -204,7 +227,7 @@ def _parse_page(url: str, body: bytes, base_netloc: str) -> PageData:
     return p
 
 
-def crawl_domain(
+def _basic_crawl_domain(
     start_url: str,
     max_pages: int = 100,
     check_externals: bool = True,
@@ -212,7 +235,7 @@ def crawl_domain(
     progress_callback=None,
 ) -> DomainResult:
     """
-    BFS crawl of a single domain. Returns DomainResult.
+    Basic synchronous BFS crawl. Returns DomainResult dataclass (fallback).
     progress_callback(pages_done: int) called after each page.
     """
     parsed_start = urlparse(start_url)
@@ -363,6 +386,178 @@ def crawl_domain(
     return result
 
 
+# ── Convert DomainResult dataclass → plain dict ────────────────────────────
+
+def _domain_result_to_dict(dr: DomainResult) -> dict:
+    from dataclasses import asdict
+    return asdict(dr)
+
+
+# ── Seotracker orchestrator bridge ─────────────────────────────────────────
+
+def _build_summary_from_pages(pages: list[dict]) -> dict:
+    title_counts: dict[str, int] = {}
+    h1_counts:    dict[str, int] = {}
+    s = dict(
+        total_pages=0, pages_200=0, pages_3xx=0, pages_4xx=0, pages_5xx=0,
+        missing_titles=0, duplicate_titles=0, missing_h1=0, duplicate_h1=0,
+        missing_meta_desc=0, long_meta_desc=0, short_meta_desc=0,
+        missing_canonical=0, noindex_count=0, broken_links=0,
+        total_internal_links=0, total_external_links=0,
+        images_without_alt=0, orphaned_pages=0,
+    )
+    for p in pages:
+        code = p.get("status_code") or 0
+        if not code:
+            continue
+        s["total_pages"] += 1
+        if 200 <= code < 300:   s["pages_200"] += 1
+        elif 300 <= code < 400: s["pages_3xx"] += 1
+        elif 400 <= code < 500: s["pages_4xx"] += 1
+        elif code >= 500:       s["pages_5xx"] += 1
+
+        ct = p.get("content_type") or ""
+        if "html" in ct or not ct:
+            t = p.get("title")
+            if not t: s["missing_titles"] += 1
+            else:     title_counts[t] = title_counts.get(t, 0) + 1
+
+            h = p.get("h1")
+            if not h: s["missing_h1"] += 1
+            else:     h1_counts[h] = h1_counts.get(h, 0) + 1
+
+            md = p.get("meta_description")
+            if not md:             s["missing_meta_desc"] += 1
+            elif len(md) > 160:    s["long_meta_desc"]    += 1
+            elif len(md) < 70:     s["short_meta_desc"]   += 1
+
+            if not p.get("canonical"): s["missing_canonical"] += 1
+            if p.get("noindex"):       s["noindex_count"]     += 1
+
+        s["broken_links"]         += len(p.get("broken_links") or [])
+        s["total_internal_links"] += p.get("internal_links_count") or 0
+        s["total_external_links"] += p.get("external_links_count") or 0
+        s["images_without_alt"]   += p.get("images_without_alt") or 0
+
+    s["duplicate_titles"] = sum(1 for c in title_counts.values() if c > 1)
+    s["duplicate_h1"]     = sum(1 for c in h1_counts.values() if c > 1)
+    return s
+
+
+async def _run_orchestrator(start_url: str, max_pages: int,
+                             respect_robots: bool, progress_callback) -> dict:
+    done_count = [0]
+
+    def on_page(_page_record):
+        done_count[0] += 1
+        if progress_callback:
+            progress_callback(done_count[0])
+
+    orc = CrawlOrchestrator(
+        site_id=start_url,
+        domain=start_url,
+        start_urls=[start_url],
+        max_pages=max_pages,
+        max_depth=10,
+        max_concurrency=5,
+        rate_limit_rps=2.0,
+        render_mode="none",
+        respect_robots=respect_robots,
+        on_page_complete=on_page,
+    )
+    return await orc.run()
+
+
+def _orchestrator_crawl_domain(
+    start_url: str,
+    max_pages: int = 100,
+    respect_robots: bool = True,
+    progress_callback=None,
+) -> dict:
+    """Crawl one domain via seotracker's async orchestrator. Returns plain dict."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        raw = loop.run_until_complete(
+            _run_orchestrator(start_url, max_pages, respect_robots, progress_callback)
+        )
+    finally:
+        loop.close()
+
+    pages_raw   = raw.get("pages", [])
+    links_raw   = raw.get("links", [])
+    status_map  = {p.get("url"): p.get("status_code") for p in pages_raw}
+
+    # Find broken internal links per page
+    broken_by_source: dict[str, list] = {}
+    for link in links_raw:
+        src  = link.get("source_url", "")
+        dest = link.get("dest_url", "")
+        if not link.get("is_internal"):
+            continue
+        code = status_map.get(dest, 200) or 200
+        if code >= 400:
+            broken_by_source.setdefault(src, []).append({"url": dest, "status": code})
+
+    pages = []
+    for p in pages_raw:
+        url = p.get("url", "")
+        ct  = p.get("content_type") or ""
+        pages.append({
+            "url":                  url,
+            "status_code":          p.get("status_code"),
+            "title":                p.get("title"),
+            "h1":                   p.get("h1_text"),
+            "h1_count":             p.get("h1_count", 0),
+            "meta_description":     p.get("meta_description"),
+            "canonical":            p.get("canonical_url"),
+            "noindex":              p.get("is_noindex", False),
+            "internal_links_count": p.get("internal_links_count", 0),
+            "external_links_count": p.get("external_links_count", 0),
+            "images_without_alt":   p.get("img_missing_alt", 0),
+            "images_total":         p.get("img_count", 0),
+            "word_count":           p.get("word_count", 0),
+            "crawl_depth":          p.get("depth", 0),
+            "content_type":         ct,
+            "broken_links":         broken_by_source.get(url, []),
+        })
+
+    summary = _build_summary_from_pages(pages)
+
+    # Orphaned: crawled pages with no inbound internal link
+    all_dest = {lk.get("dest_url") for lk in links_raw if lk.get("is_internal")}
+    crawled  = {p["url"] for p in pages}
+    summary["orphaned_pages"] = max(0, len(crawled - all_dest) - 1)
+
+    return {"domain": start_url, "summary": summary, "pages": pages}
+
+
+# ── Public API ──────────────────────────────────────────────────────────────
+
+def crawl_domain(
+    start_url: str,
+    max_pages: int = 100,
+    check_externals: bool = True,
+    respect_robots: bool = True,
+    progress_callback=None,
+) -> dict:
+    """Crawl a single domain. Returns a plain dict (domain, summary, pages)."""
+    if _HAS_ORCHESTRATOR:
+        try:
+            return _orchestrator_crawl_domain(
+                start_url, max_pages, respect_robots, progress_callback
+            )
+        except Exception as e:
+            logger.error("Orchestrator failed for %s: %s — falling back", start_url, e)
+
+    # Fallback: basic sync BFS crawler
+    dr = _basic_crawl_domain(
+        start_url, max_pages, check_externals, respect_robots,
+        lambda n: progress_callback(n) if progress_callback else None,
+    )
+    return _domain_result_to_dict(dr)
+
+
 def crawl_multiple(
     client_url: str,
     competitor_urls: list[str],
@@ -370,16 +565,16 @@ def crawl_multiple(
     check_externals: bool = True,
     respect_robots: bool = True,
     progress_callback=None,
-) -> dict[str, DomainResult]:
+) -> dict[str, dict]:
     """
-    Crawl client + all competitors. Returns dict keyed by URL.
+    Crawl client + all competitors. Returns dict[url -> domain_result_dict].
     """
-    results = {}
+    results: dict[str, dict] = {}
     all_urls = [client_url] + competitor_urls
-    total   = len(all_urls)
+    total    = len(all_urls)
 
     for i, url in enumerate(all_urls):
-        logger.info(f"Crawling domain {i+1}/{total}: {url}")
+        logger.info("Crawling domain %d/%d: %s", i + 1, total, url)
         try:
             def cb(n, _url=url, _i=i):
                 if progress_callback:
@@ -393,7 +588,7 @@ def crawl_multiple(
                 progress_callback=cb,
             )
         except Exception as e:
-            logger.error(f"Failed to crawl {url}: {e}")
-            results[url] = DomainResult(domain=url)
+            logger.error("Failed to crawl %s: %s", url, e)
+            results[url] = {"domain": url, "summary": {}, "pages": []}
 
     return results
