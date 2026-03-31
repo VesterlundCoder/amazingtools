@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
   <script>tailwind.config={theme:{extend:{fontFamily:{sans:['Inter','sans-serif']}}}}</script>
   <style>
     *{font-family:'Inter',sans-serif}
@@ -136,12 +137,27 @@
           <div id="issues-content"></div>
         </div>
 
-        <!-- IPR -->
+        <!-- IPR / Link Graph -->
         <div id="section-ipr" style="padding:0;display:none">
-          <div style="padding:16px 24px;border-bottom:1px solid #f1f5f9">
-            <p style="font-size:13px;color:#555;margin:0">Internal PageRank (IPR) = inbound contextual links ÷ outbound contextual links. Higher score = more link equity flowing into this page.</p>
+          <div style="padding:14px 20px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+            <p style="font-size:13px;color:#555;margin:0">Internal PageRank (IPR) = inbound ÷ outbound contextual links. Node size = IPR score. Drag nodes, scroll to zoom.</p>
+            <div style="display:flex;gap:8px">
+              <button id="view-graph-btn" onclick="setIPRView('graph')" style="background:#101010;color:#fff;border:none;border-radius:7px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer">Graph</button>
+              <button id="view-table-btn" onclick="setIPRView('table')" style="background:#f1f5f9;color:#555;border:1px solid #e2e8f0;border-radius:7px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer">Table</button>
+            </div>
           </div>
-          <div style="overflow-x:auto">
+          <!-- Graph view -->
+          <div id="ipr-graph-wrap" style="position:relative">
+            <div id="d3-graph-container" style="width:100%;height:520px;position:relative;overflow:hidden;background:#f8fafc;border-radius:0 0 12px 12px"></div>
+            <div style="position:absolute;top:10px;right:14px;background:rgba(255,255,255,.9);border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:11px">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px"><span style="width:10px;height:10px;border-radius:50%;background:#059669;display:inline-block"></span>200 OK</div>
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px"><span style="width:10px;height:10px;border-radius:50%;background:#0bb4aa;display:inline-block"></span>3xx</div>
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px"><span style="width:10px;height:10px;border-radius:50%;background:#dc2626;display:inline-block"></span>4xx</div>
+              <div style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:50%;background:#7c3aed;display:inline-block"></span>5xx</div>
+            </div>
+          </div>
+          <!-- Table view -->
+          <div id="ipr-table-wrap" style="overflow-x:auto;display:none">
             <table id="ipr-table">
               <thead><tr>
                 <th style="min-width:280px">URL</th>
@@ -230,6 +246,17 @@
     btn.classList.add('active');
   }
 
+  /* ── IPR view toggle ── */
+  function setIPRView(view) {
+    const isGraph = view === 'graph';
+    document.getElementById('ipr-graph-wrap').style.display   = isGraph ? '' : 'none';
+    document.getElementById('ipr-table-wrap').style.display   = isGraph ? 'none' : '';
+    document.getElementById('view-graph-btn').style.background = isGraph ? '#101010' : '#f1f5f9';
+    document.getElementById('view-graph-btn').style.color      = isGraph ? '#fff'    : '#555';
+    document.getElementById('view-table-btn').style.background = isGraph ? '#f1f5f9' : '#101010';
+    document.getElementById('view-table-btn').style.color      = isGraph ? '#555'    : '#fff';
+  }
+
   /* ── IPR rendering ── */
   function renderIPR(pages) {
     const withIPR = pages.filter(p => p.ipr !== undefined);
@@ -237,11 +264,11 @@
 
     document.getElementById('ipr-tab-btn').style.display = '';
 
+    /* Table */
     const sorted = [...withIPR].sort((a, b) => b.ipr - a.ipr);
     const maxIPR = sorted[0]?.ipr || 1;
-
     document.getElementById('ipr-tbody').innerHTML = sorted.map(p => {
-      const barPct = Math.round((p.ipr / maxIPR) * 100);
+      const barPct   = Math.round((p.ipr / maxIPR) * 100);
       const barColor = p.ipr >= 1 ? '#059669' : p.ipr >= 0.5 ? '#0bb4aa' : '#f59e0b';
       const shortUrl = p.url.replace(/^https?:\/\/[^/]+/, '') || '/';
       return `<tr>
@@ -258,6 +285,119 @@
         </td>
       </tr>`;
     }).join('');
+
+    /* D3 graph */
+    renderD3Graph(withIPR);
+  }
+
+  /* ── D3 force-directed link graph ── */
+  function renderD3Graph(pages) {
+    const container = document.getElementById('d3-graph-container');
+    container.innerHTML = '';
+
+    const hasLinks = pages.some(p => p.internal_links && p.internal_links.length);
+    if (!hasLinks) {
+      container.innerHTML = '<p style="padding:30px;color:#aaa;font-size:13px">No link graph data available. Re-crawl with <strong>Calculate Internal PageRank</strong> enabled to populate the graph.</p>';
+      return;
+    }
+
+    const top  = [...pages].sort((a, b) => (b.ipr||0) - (a.ipr||0)).slice(0, 120);
+    const urlS = new Set(top.map(p => p.url));
+    const maxIPR = Math.max(...top.map(p => p.ipr || 0), 0.01);
+
+    const nodes = top.map(p => ({
+      id:      p.url,
+      label:   p.url.replace(/^https?:\/\/[^/]+/, '') || '/',
+      ipr:     p.ipr || 0,
+      status:  p.status_code || 200,
+      title:   p.title || '',
+      inbound: p.ipr_inbound || 0,
+      outbound:p.ipr_outbound || 0,
+    }));
+
+    const linksArr = [];
+    top.forEach(p => {
+      (p.internal_links || []).forEach(t => {
+        if (urlS.has(t) && t !== p.url) linksArr.push({source: p.url, target: t});
+      });
+    });
+
+    const W = container.clientWidth || 800;
+    const H = 520;
+
+    function nodeR(d) { return 5 + (d.ipr / maxIPR) * 18; }
+    function nodeColor(code) {
+      const c = parseInt(code);
+      if (c === 200)          return '#059669';
+      if (c >= 300 && c<400) return '#0bb4aa';
+      if (c >= 400 && c<500) return '#dc2626';
+      if (c >= 500)          return '#7c3aed';
+      return '#888';
+    }
+
+    const svg = d3.select(container).append('svg')
+      .attr('width','100%').attr('height', H)
+      .style('display','block');
+
+    /* Arrow marker */
+    svg.append('defs').append('marker')
+      .attr('id','arr').attr('viewBox','0 -5 10 10')
+      .attr('refX', 22).attr('refY', 0)
+      .attr('markerWidth', 5).attr('markerHeight', 5)
+      .attr('orient','auto')
+      .append('path').attr('d','M0,-5L10,0L0,5').attr('fill','#cbd5e1');
+
+    const g = svg.append('g');
+    svg.call(d3.zoom().scaleExtent([0.15,4])
+      .on('zoom', ev => g.attr('transform', ev.transform)));
+
+    const sim = d3.forceSimulation(nodes)
+      .force('link', d3.forceLink(linksArr).id(d=>d.id).distance(65).strength(0.25))
+      .force('charge', d3.forceManyBody().strength(-180))
+      .force('center', d3.forceCenter(W/2, H/2))
+      .force('collision', d3.forceCollide().radius(d => nodeR(d)+3));
+
+    const link = g.append('g').selectAll('line').data(linksArr).join('line')
+      .attr('stroke','#e2e8f0').attr('stroke-width',1)
+      .attr('marker-end','url(#arr)');
+
+    const drag = d3.drag()
+      .on('start',(ev,d)=>{ if(!ev.active) sim.alphaTarget(0.3).restart(); d.fx=d.x; d.fy=d.y; })
+      .on('drag', (ev,d)=>{ d.fx=ev.x; d.fy=ev.y; })
+      .on('end',  (ev,d)=>{ if(!ev.active) sim.alphaTarget(0); d.fx=null; d.fy=null; });
+
+    const nodeG = g.append('g').selectAll('g').data(nodes).join('g').call(drag);
+
+    nodeG.append('circle')
+      .attr('r', nodeR)
+      .attr('fill', d => nodeColor(d.status))
+      .attr('fill-opacity', 0.82)
+      .attr('stroke','#fff').attr('stroke-width',1.5);
+
+    /* Tooltip */
+    const tip = d3.select(container).append('div')
+      .style('position','absolute').style('background','#1e293b')
+      .style('color','#f1f5f9').style('padding','8px 12px')
+      .style('border-radius','8px').style('font-size','12px')
+      .style('pointer-events','none').style('display','none')
+      .style('max-width','260px').style('line-height','1.5').style('z-index','10');
+
+    nodeG
+      .on('mouseover',(ev,d) => {
+        tip.style('display','block')
+          .html(`<strong>${d.label||'/'}</strong><br>IPR: ${d.ipr.toFixed(3)}&nbsp;&nbsp;In:${d.inbound}&nbsp;Out:${d.outbound}<br><span style="color:${nodeColor(d.status)}">${d.status}</span>`);
+      })
+      .on('mousemove', ev => {
+        const rc = container.getBoundingClientRect();
+        tip.style('left',(ev.clientX-rc.left+14)+'px').style('top',(ev.clientY-rc.top-28)+'px');
+      })
+      .on('mouseout', () => tip.style('display','none'));
+
+    sim.on('tick', () => {
+      link.attr('x1',d=>d.source.x).attr('y1',d=>d.source.y)
+          .attr('x2',d=>d.target.x).attr('y2',d=>d.target.y);
+      nodeG.attr('transform',d=>`translate(${d.x},${d.y})`);
+    });
   }
 
   /* ── Status badge ── */

@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>QueryMatch — Amazing Tools</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config={theme:{extend:{fontFamily:{sans:['Inter','sans-serif']}}}}</script>
+  <style>
+    *{font-family:'Inter',sans-serif}
+    body{background:#f8fafc;color:#101010}
+    .nav-link{color:#555;font-size:14px;font-weight:500;transition:color .15s;text-decoration:none}
+    .nav-link:hover,.nav-link.active{color:#0bb4aa}
+    .logout-btn{background:none;border:1px solid #e2e8f0;color:#555;padding:6px 14px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s}
+    .logout-btn:hover{border-color:#0bb4aa;color:#0bb4aa}
+    .card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+    .btn-primary{background:#0bb4aa;color:#fff;border:none;border-radius:9px;padding:11px 24px;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s}
+    .btn-primary:hover{background:#059e95;transform:translateY(-1px);box-shadow:0 4px 14px rgba(11,180,170,.35)}
+    .btn-primary:disabled{background:#a7f3d0;cursor:not-allowed;transform:none;box-shadow:none}
+    .input-field{border:1px solid #e2e8f0;border-radius:9px;padding:10px 14px;font-size:14px;outline:none;width:100%;transition:border .15s;background:#fff}
+    .input-field:focus{border-color:#0bb4aa;box-shadow:0 0 0 3px rgba(11,180,170,.1)}
+    .sim-bar-wrap{background:#e2e8f0;border-radius:4px;height:6px;overflow:hidden;flex:1}
+    .section-row{border-radius:10px;border:1px solid #e2e8f0;background:#fff;padding:16px 18px;margin-bottom:12px;transition:border .15s}
+    .section-row:hover{border-color:#b2ede9}
+    .section-row.expanded{border-color:#0bb4aa;box-shadow:0 0 0 3px rgba(11,180,170,.08)}
+    .rewrite-box{background:#f0fdfc;border:1px solid #b2ede9;border-radius:8px;padding:14px 16px;margin-top:12px;font-size:13px;line-height:1.7;color:#101010}
+    .tag-pill{display:inline-block;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+    .tag-h{background:#f1f5f9;color:#555}
+    .tag-p{background:#e6fdfb;color:#0aa098}
+    .dot-pulse{display:inline-flex;gap:4px;align-items:center}
+    .dot-pulse span{width:6px;height:6px;border-radius:50%;background:#0bb4aa;animation:pulse 1.4s ease-in-out infinite}
+    .dot-pulse span:nth-child(2){animation-delay:.2s}
+    .dot-pulse span:nth-child(3){animation-delay:.4s}
+    @keyframes pulse{0%,80%,100%{opacity:.2;transform:scale(.85)}40%{opacity:1;transform:scale(1)}}
+  </style>
+</head>
+<body class="min-h-screen">
+
+<nav style="background:#fff;border-bottom:1px solid #e2e8f0;position:sticky;top:0;z-index:50">
+  <div class="max-w-5xl mx-auto px-6 flex items-center justify-between" style="height:60px">
+    <a href="dashboard.html" style="font-weight:800;font-size:18px;color:#101010;text-decoration:none;letter-spacing:-0.5px">
+      Amazing <span style="color:#0bb4aa">Tools</span>
+    </a>
+    <div class="flex items-center gap-6">
+      <a href="seo-crawler.html" class="nav-link">SEO Crawler</a>
+      <a href="query-match.html" class="nav-link active" style="color:#0bb4aa">QueryMatch</a>
+      <button class="logout-btn" onclick="logout()">Log out</button>
+    </div>
+  </div>
+</nav>
+
+<!-- Hero -->
+<div style="background:linear-gradient(135deg,#f0fdfc 0%,#fff 60%);border-bottom:1px solid #e2e8f0;padding:40px 0 36px">
+  <div class="max-w-5xl mx-auto px-6">
+    <h1 style="font-size:1.9rem;font-weight:800;color:#101010;letter-spacing:-0.8px;margin-bottom:8px">
+      Query<span style="color:#0bb4aa">Match</span>
+    </h1>
+    <p style="font-size:14px;color:#666;max-width:520px;line-height:1.6;margin-bottom:28px">
+      Semantic relevance analysis. Enter any URL and a search query to see how well each section aligns — ranked by cosine similarity using OpenAI embeddings.
+    </p>
+
+    <!-- Input form -->
+    <div class="card" style="padding:24px;max-width:680px">
+      <div style="margin-bottom:14px">
+        <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#888;display:block;margin-bottom:6px">Page URL</label>
+        <input id="url-input" class="input-field" placeholder="https://example.com/your-page" type="url"/>
+      </div>
+      <div style="margin-bottom:18px">
+        <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#888;display:block;margin-bottom:6px">Target Keyword / Query</label>
+        <input id="query-input" class="input-field" placeholder="e.g. SEO audit tool for agencies" onkeydown="if(event.key==='Enter')runAnalysis()"/>
+      </div>
+      <div style="display:flex;align-items:center;gap:14px">
+        <button class="btn-primary" id="analyze-btn" onclick="runAnalysis()">Analyze →</button>
+        <span id="run-status" style="font-size:13px;color:#888;display:none"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Results area -->
+<div class="max-w-5xl mx-auto px-6 py-8">
+
+  <!-- Idle -->
+  <div id="state-idle" style="text-align:center;padding:60px 20px;color:#aaa;font-size:14px">
+    Enter a URL and keyword above to begin.
+  </div>
+
+  <!-- Loading -->
+  <div id="state-loading" style="display:none;text-align:center;padding:70px 20px">
+    <div class="dot-pulse" style="justify-content:center;margin-bottom:18px"><span></span><span></span><span></span></div>
+    <p style="font-size:15px;font-weight:600;color:#101010;margin-bottom:6px">Fetching &amp; embedding page content…</p>
+    <p style="font-size:13px;color:#888">This takes 5–15 seconds depending on page size.</p>
+  </div>
+
+  <!-- Error -->
+  <div id="state-error" style="display:none" class="card" style="padding:32px;text-align:center">
+    <p style="font-size:14px;font-weight:600;color:#dc2626;margin-bottom:6px">Analysis failed</p>
+    <p id="error-msg" style="font-size:13px;color:#888;margin-bottom:14px"></p>
+    <button onclick="runAnalysis()" style="background:#fef2f2;border:1px solid #fecaca;color:#dc2626;border-radius:8px;padding:7px 16px;font-size:13px;font-weight:600;cursor:pointer">Try again</button>
+  </div>
+
+  <!-- Results -->
+  <div id="state-results" style="display:none">
+
+    <!-- Summary bar -->
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px">
+      <div>
+        <h2 id="results-title" style="font-size:16px;font-weight:700;color:#101010;margin:0 0 4px"></h2>
+        <p id="results-meta" style="font-size:12px;color:#888;margin:0"></p>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap" id="legend">
+        <span style="font-size:11px;font-weight:600;display:flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:2px;background:#059669;display:inline-block"></span>High ≥ 0.45</span>
+        <span style="font-size:11px;font-weight:600;display:flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:2px;background:#0bb4aa;display:inline-block"></span>Medium 0.25–0.44</span>
+        <span style="font-size:11px;font-weight:600;display:flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:2px;background:#f59e0b;display:inline-block"></span>Low &lt; 0.25</span>
+      </div>
+    </div>
+
+    <!-- Sections list -->
+    <div id="sections-list"></div>
+
+  </div>
+</div>
+
+<footer style="border-top:1px solid #e2e8f0;padding:18px 0;margin-top:20px">
+  <div class="max-w-5xl mx-auto px-6" style="display:flex;justify-content:space-between">
+    <span style="font-size:12px;color:#aaa">Amazing Tools · davidvesterlund.com</span>
+    <span style="font-size:12px;color:#aaa">QueryMatch — OpenAI text-embedding-3-small</span>
+  </div>
+</footer>
+
+<script>
+  const API_BASE = 'https://web-production-c14f30.up.railway.app';
+
+  if (!sessionStorage.getItem('at_auth')) window.location.href = 'login.html';
+  function logout() { sessionStorage.removeItem('at_auth'); window.location.href = 'login.html'; }
+
+  function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  function showState(name) {
+    ['idle','loading','error','results'].forEach(s => {
+      document.getElementById(`state-${s}`).style.display = s === name ? '' : 'none';
+    });
+  }
+
+  function simColor(v) {
+    if (v >= 0.45) return '#059669';
+    if (v >= 0.25) return '#0bb4aa';
+    return '#f59e0b';
+  }
+
+  function simLabel(v) {
+    if (v >= 0.45) return 'High';
+    if (v >= 0.25) return 'Medium';
+    return 'Low';
+  }
+
+  async function runAnalysis() {
+    const url   = document.getElementById('url-input').value.trim();
+    const query = document.getElementById('query-input').value.trim();
+    if (!url)   { alert('Enter a page URL.'); return; }
+    if (!query) { alert('Enter a keyword or query.'); return; }
+
+    const btn = document.getElementById('analyze-btn');
+    btn.disabled = true;
+    btn.textContent = 'Analyzing…';
+    showState('loading');
+
+    try {
+      const r = await fetch(`${API_BASE}/api/analyze/semantic`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ url, query, max_sections: 40 }),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${r.status}`);
+      }
+      const data = await r.json();
+      renderResults(data);
+    } catch(e) {
+      document.getElementById('error-msg').textContent = e.message;
+      showState('error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Analyze →';
+    }
+  }
+
+  function renderResults(data) {
+    document.getElementById('results-title').textContent =
+      data.page_title ? `"${data.page_title}"` : data.url;
+    document.getElementById('results-meta').textContent =
+      `${data.total_sections} sections analysed · Query: "${data.query}"`;
+
+    const list = document.getElementById('sections-list');
+    list.innerHTML = data.sections.map((s, i) => {
+      const color    = simColor(s.similarity);
+      const barW     = Math.round(Math.min(s.similarity * 2 * 100, 100));
+      const isHeading = s.type === 'heading';
+      const tagPill  = isHeading
+        ? `<span class="tag-pill tag-h">H${s.level}</span>`
+        : `<span class="tag-pill tag-p">${s.tag?.toUpperCase() || 'P'}</span>`;
+      const headingLine = (!isHeading && s.heading)
+        ? `<p style="font-size:11px;color:#aaa;margin:0 0 4px">↳ under: ${esc(s.heading)}</p>` : '';
+
+      return `
+        <div class="section-row" id="row-${i}">
+          <div style="display:flex;align-items:flex-start;gap:12px;cursor:pointer" onclick="toggleRow(${i})">
+            <div style="min-width:52px;text-align:right">
+              <span style="font-size:15px;font-weight:800;color:${color}">${(s.similarity*100).toFixed(1)}%</span>
+            </div>
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+                ${tagPill}
+                <div class="sim-bar-wrap">
+                  <div style="background:${color};height:100%;width:${barW}%;border-radius:4px;transition:width .4s"></div>
+                </div>
+                <span style="font-size:10px;font-weight:600;color:${color};min-width:46px">${simLabel(s.similarity)}</span>
+              </div>
+              ${headingLine}
+              <p style="font-size:13px;color:#333;margin:0;line-height:1.55;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden" id="text-preview-${i}">${esc(s.text)}</p>
+            </div>
+            <span style="color:#aaa;font-size:14px;flex-shrink:0" id="chevron-${i}">›</span>
+          </div>
+          <div id="expand-${i}" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid #f1f5f9">
+            <p style="font-size:13px;color:#333;line-height:1.7;margin:0 0 12px">${esc(s.text)}</p>
+            <button onclick="rewriteSection(${i}, ${JSON.stringify(s.text).replace(/</g,'\\u003c')}, '${encodeURIComponent(document.getElementById('query-input').value)}')"
+              style="background:#0bb4aa;color:#fff;border:none;border-radius:7px;padding:7px 16px;font-size:12px;font-weight:600;cursor:pointer"
+              id="rewrite-btn-${i}">
+              ✦ Rewrite with GPT
+            </button>
+            <div id="rewrite-result-${i}" style="display:none"></div>
+          </div>
+        </div>`;
+    }).join('');
+
+    showState('results');
+  }
+
+  function toggleRow(i) {
+    const exp  = document.getElementById(`expand-${i}`);
+    const chev = document.getElementById(`chevron-${i}`);
+    const row  = document.getElementById(`row-${i}`);
+    const open = exp.style.display === 'none';
+    exp.style.display  = open ? '' : 'none';
+    chev.textContent   = open ? '⌄' : '›';
+    row.classList.toggle('expanded', open);
+  }
+
+  async function rewriteSection(i, text, encodedQuery) {
+    const query = decodeURIComponent(encodedQuery);
+    const btn   = document.getElementById(`rewrite-btn-${i}`);
+    const box   = document.getElementById(`rewrite-result-${i}`);
+    btn.disabled    = true;
+    btn.textContent = '⟳ Rewriting…';
+
+    try {
+      const r = await fetch(`${API_BASE}/api/analyze/rewrite`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          section: text,
+          query:   query,
+          url:     document.getElementById('url-input').value.trim(),
+        }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const data = await r.json();
+
+      box.style.display = '';
+      box.innerHTML = `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+          <div>
+            <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#aaa;margin-bottom:6px">Original</p>
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;font-size:13px;line-height:1.65;color:#666">${esc(text)}</div>
+          </div>
+          <div>
+            <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#0bb4aa;margin-bottom:6px">GPT Rewrite</p>
+            <div class="rewrite-box">${esc(data.rewritten)}</div>
+          </div>
+        </div>
+        <button onclick="copyText(${i})" style="margin-top:8px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:7px;padding:5px 12px;font-size:12px;font-weight:500;cursor:pointer;color:#555">
+          Copy rewrite
+        </button>`;
+      window._rewrites = window._rewrites || {};
+      window._rewrites[i] = data.rewritten;
+
+    } catch(e) {
+      box.style.display = '';
+      box.innerHTML = `<p style="color:#dc2626;font-size:12px;margin-top:8px">Rewrite failed: ${esc(e.message)}</p>`;
+    } finally {
+      btn.disabled    = false;
+      btn.textContent = '✦ Rewrite with GPT';
+    }
+  }
+
+  function copyText(i) {
+    const text = (window._rewrites || {})[i];
+    if (text) navigator.clipboard.writeText(text).then(() => alert('Copied!'));
+  }
+
+  showState('idle');
+</script>
+</body>
+</html>

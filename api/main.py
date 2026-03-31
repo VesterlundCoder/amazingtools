@@ -21,6 +21,8 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Optional
 
+import httpx
+from bs4 import BeautifulSoup
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI
@@ -112,6 +114,18 @@ class CrawlRequest(BaseModel):
     respect_robots:  bool      = True
     use_playwright:  bool      = False
     calculate_ipr:   bool      = False
+
+
+class SemanticRequest(BaseModel):
+    url:          str
+    query:        str
+    max_sections: int = 30
+
+
+class RewriteRequest(BaseModel):
+    section: str
+    query:   str
+    url:     str = ""
 
 
 class JobSummary(BaseModel):
@@ -268,6 +282,116 @@ def get_job(job_id: str):
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
+
+
+# ── Semantic analysis helpers ───────────────────────────────────────────────
+
+def _cosine_sim(a: list, b: list) -> float:
+    dot = sum(x * y for x, y in zip(a, b))
+    na  = sum(x * x for x in a) ** 0.5
+    nb  = sum(x * x for x in b) ** 0.5
+    return dot / (na * nb + 1e-10)
+
+
+async def _fetch_page_sections(url: str) -> list[dict]:
+    try:
+        async with httpx.AsyncClient(
+            timeout=30, follow_redirects=True,
+            headers={"User-Agent": "AmazingTools-SEO/1.0 (+https://davidvesterlund.com)"}
+        ) as c:
+            r = await c.get(url)
+            r.raise_for_status()
+    except Exception as e:
+        raise HTTPException(400, detail=f"Could not fetch URL: {e}")
+
+    soup = BeautifulSoup(r.text, "lxml")
+    for tag in soup(["nav", "header", "footer", "script", "style", "noscript", "aside"]):
+        tag.decompose()
+
+    body = soup.find("main") or soup.find("article") or soup.body
+    if not body:
+        raise HTTPException(400, detail="No readable content found on page.")
+
+    sections = []
+    current_heading = ""
+    for el in body.find_all(["h1","h2","h3","h4","h5","h6","p","li"]):
+        text = el.get_text(" ", strip=True)
+        if not text or len(text) < 15:
+            continue
+        if el.name[0] == "h":
+            current_heading = text
+            sections.append({"type": "heading", "level": int(el.name[1]),
+                              "tag": el.name, "text": text, "heading": text})
+        else:
+            sections.append({"type": "text", "tag": el.name,
+                              "text": text, "heading": current_heading})
+
+    return sections[:120]
+
+
+# ── Semantic endpoints ─────────────────────────────────────────────────────────
+
+@app.post("/api/analyze/semantic")
+async def semantic_analysis(req: SemanticRequest):
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        raise HTTPException(500, detail="OPENAI_API_KEY not configured.")
+
+    sections = await _fetch_page_sections(req.url)
+    if not sections:
+        raise HTTPException(400, detail="No readable content found.")
+
+    texts = [s["text"] for s in sections]
+    oai   = OpenAI(api_key=api_key)
+
+    try:
+        emb = oai.embeddings.create(
+            model="text-embedding-3-small",
+            input=[req.query] + texts,
+        )
+    except Exception as e:
+        raise HTTPException(500, detail=f"Embedding error: {e}")
+
+    embeddings  = [e.embedding for e in emb.data]
+    query_emb   = embeddings[0]
+
+    results = []
+    for i, sec in enumerate(sections):
+        sim = _cosine_sim(query_emb, embeddings[i + 1])
+        results.append({**sec, "similarity": round(float(sim), 4), "index": i})
+
+    results.sort(key=lambda x: x["similarity"], reverse=True)
+    page_title = next((s["text"] for s in sections if s.get("level") == 1), req.url)
+
+    return {
+        "url":            req.url,
+        "query":          req.query,
+        "page_title":     page_title,
+        "total_sections": len(sections),
+        "sections":       results[:req.max_sections],
+    }
+
+
+@app.post("/api/analyze/rewrite")
+async def rewrite_section(req: RewriteRequest):
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        raise HTTPException(500, detail="OPENAI_API_KEY not configured.")
+
+    oai = OpenAI(api_key=api_key)
+    prompt = (
+        f'Rewrite the text below to be more semantically aligned with the keyword/query "{req.query}".\n'
+        f'Keep the same language, structure type, and approximate length. Improve relevance naturally.'
+        + (f'\nPage: {req.url}' if req.url else '') +
+        f'\n\nOriginal:\n{req.section}\n\nRewrite (no preamble):'
+    )
+    resp = oai.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=600,
+        temperature=0.6,
+    )
+    return {"rewritten": resp.choices[0].message.content.strip()}
 
 
 # ── AI analysis ───────────────────────────────────────────────────────────────
