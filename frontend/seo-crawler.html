@@ -247,6 +247,8 @@
       }
 
       const job = await r.json();
+      lsSaveJob({ id: job.id, client_url: clientUrl, competitor_count: compInputs.length,
+                  status: 'pending', created_at: job.created_at, pages_crawled: null });
       msg.textContent = `✓ Job started (ID: ${job.id})`;
       msg.style.display = 'inline';
       btn.textContent = '🔍 Start SEO Crawl';
@@ -264,6 +266,31 @@
     }
   }
 
+  /* ── localStorage cache ── */
+  const LS_KEY = 'at_jobs';
+  function lsLoad() {
+    try { return JSON.parse(localStorage.getItem(LS_KEY) || '[]'); } catch { return []; }
+  }
+  function lsSaveJob(job) {
+    const jobs = lsLoad().filter(j => j.id !== job.id);
+    jobs.unshift(job);
+    localStorage.setItem(LS_KEY, JSON.stringify(jobs.slice(0, 50)));
+  }
+  function lsUpdateJob(id, patch) {
+    const jobs = lsLoad().map(j => j.id === id ? { ...j, ...patch } : j);
+    localStorage.setItem(LS_KEY, JSON.stringify(jobs));
+  }
+  function lsMerge(apiJobs) {
+    const api = Object.fromEntries(apiJobs.map(j => [j.id, j]));
+    const cached = lsLoad();
+    const merged = {};
+    cached.forEach(j => { merged[j.id] = { ...j, _cached: true }; });
+    apiJobs.forEach(j => { merged[j.id] = j; });
+    return Object.values(merged)
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      .slice(0, 50);
+  }
+
   /* Polling */
   const pollingTimers = {};
   function startPolling(jobId) {
@@ -272,6 +299,7 @@
       try {
         const r = await fetch(`${API_BASE}/api/jobs/${jobId}`);
         const job = await r.json();
+        lsUpdateJob(jobId, { status: job.status, pages_crawled: job.pages_crawled, completed_at: job.completed_at });
         if (job.status === 'done' || job.status === 'error') {
           clearInterval(pollingTimers[jobId]);
           delete pollingTimers[jobId];
@@ -293,52 +321,56 @@
     return `<span style="background:${bg};color:${c};border:1px solid ${br};padding:2px 9px;border-radius:9999px;font-size:11px;font-weight:600">${label}</span>`;
   }
 
-  /* Load job history */
+  /* Load job history — merges API + localStorage */
   async function loadJobs() {
+    let apiJobs = [];
+    let apiOnline = false;
     try {
-      const r = await fetch(`${API_BASE}/api/jobs?limit=20`);
-      if (!r.ok) throw new Error();
-      const jobs = await r.json();
+      const r = await fetch(`${API_BASE}/api/jobs?limit=50`);
+      if (r.ok) { apiJobs = await r.json(); apiOnline = true; }
+    } catch { /* offline */ }
 
-      document.getElementById('jobs-loading').style.display = 'none';
-      if (!jobs.length) {
-        document.getElementById('jobs-empty').style.display = 'block';
-        document.getElementById('jobs-table').style.display = 'none';
-        return;
-      }
+    const jobs = lsMerge(apiJobs);
 
-      document.getElementById('jobs-empty').style.display = 'none';
-      document.getElementById('jobs-table').style.display = 'table';
-
-      document.getElementById('jobs-tbody').innerHTML = jobs.map(j => `
-        <tr>
-          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500">
-            <a href="${j.client_url}" target="_blank" style="color:#101010;text-decoration:none">${j.client_url}</a>
-          </td>
-          <td style="color:#666">${j.competitor_count}</td>
-          <td style="color:#666">${j.pages_crawled ?? '—'}</td>
-          <td>${statusBadge(j.status)}</td>
-          <td style="color:#888;font-size:12px">${new Date(j.created_at).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</td>
-          <td style="white-space:nowrap">
-            ${j.status === 'done'
-              ? `<span style="display:flex;gap:8px;align-items:center">
-                  <a href="results.html?job=${j.id}" style="color:#0bb4aa;font-size:13px;font-weight:600;text-decoration:none">Results →</a>
-                  <a href="mevo-ai.html?job=${j.id}" style="background:#101010;color:#0bb4aa;font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px;text-decoration:none;letter-spacing:.03em">MEVO.AI</a>
-                </span>`
-              : j.status === 'running'
-                ? `<span style="color:#aaa;font-size:12px">Crawling…</span>`
-                : `<span style="color:#aaa;font-size:12px">—</span>`}
-          </td>
-        </tr>
-      `).join('');
-
-      /* Resume polling for running jobs */
-      jobs.filter(j => j.status === 'running' || j.status === 'pending')
-          .forEach(j => startPolling(j.id));
-
-    } catch {
-      document.getElementById('jobs-loading').textContent = 'API offline — results will appear once the backend is running.';
+    document.getElementById('jobs-loading').style.display = 'none';
+    if (!jobs.length) {
+      document.getElementById('jobs-empty').style.display = 'block';
+      document.getElementById('jobs-table').style.display = 'none';
+      return;
     }
+
+    document.getElementById('jobs-empty').style.display = 'none';
+    document.getElementById('jobs-table').style.display = 'table';
+
+    document.getElementById('jobs-tbody').innerHTML = jobs.map(j => {
+      const isCached = j._cached && !apiOnline;
+      const statusCell = isCached
+        ? `<span style="background:#f1f5f9;color:#888;border:1px solid #e2e8f0;padding:2px 9px;border-radius:9999px;font-size:11px;font-weight:600">cached</span>`
+        : statusBadge(j.status);
+      return `<tr>
+        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500">
+          <a href="${j.client_url}" target="_blank" style="color:#101010;text-decoration:none">${j.client_url}</a>
+        </td>
+        <td style="color:#666">${j.competitor_count}</td>
+        <td style="color:#666">${j.pages_crawled ?? '—'}</td>
+        <td>${statusCell}</td>
+        <td style="color:#888;font-size:12px">${new Date(j.created_at).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</td>
+        <td style="white-space:nowrap">
+          ${j.status === 'done'
+            ? `<span style="display:flex;gap:8px;align-items:center">
+                <a href="results.html?job=${j.id}" style="color:#0bb4aa;font-size:13px;font-weight:600;text-decoration:none">Results →</a>
+                <a href="mevo-ai.html?job=${j.id}" style="background:#101010;color:#0bb4aa;font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px;text-decoration:none;letter-spacing:.03em">MEVO.AI</a>
+              </span>`
+            : j.status === 'running'
+              ? `<span style="color:#aaa;font-size:12px">Crawling…</span>`
+              : `<span style="color:#aaa;font-size:12px">—</span>`}
+        </td>
+      </tr>`;
+    }).join('');
+
+    /* Resume polling for active jobs */
+    jobs.filter(j => j.status === 'running' || j.status === 'pending')
+        .forEach(j => startPolling(j.id));
   }
 
   loadJobs();
