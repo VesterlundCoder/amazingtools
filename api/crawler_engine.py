@@ -543,42 +543,61 @@ def _orchestrator_crawl_domain(
 
 # ── Internal PageRank (IPR) ─────────────────────────────────────────────────
 
-def compute_ipr(domain_result: dict) -> dict:
+def compute_ipr(domain_result: dict, damping: float = 0.85, iterations: int = 50) -> dict:
     """
-    Add 'ipr', 'ipr_inbound', 'ipr_outbound' to every page.
-    IPR = inbound_internal_links / max(1, outbound_internal_links)
+    Iterative PageRank (d=0.85) over the internal link graph.
+    Adds 'ipr' (0-10 normalised score), 'ipr_inbound', 'ipr_outbound' to every page.
+    Handles dangling nodes (no outbound links) by redistributing their rank evenly.
     Only counts links between pages that were actually crawled.
     Modifies domain_result in place and returns it.
     """
     pages   = domain_result.get("pages", [])
     url_set = {p.get("url", "") for p in pages}
+    urls    = list(url_set)
+    N       = len(urls)
+    if N == 0:
+        return domain_result
 
-    inbound:  dict[str, int] = {p.get("url", ""): 0 for p in pages}
-    outbound: dict[str, int] = {}
+    # Build deduplicated adjacency lists
+    out_links: dict[str, list[str]] = {u: [] for u in urls}
+    in_links:  dict[str, list[str]] = {u: [] for u in urls}
 
     for page in pages:
-        url   = page.get("url", "")
+        src   = page.get("url", "")
         links = page.get("internal_links") or []
-        # Resolve dicts (basic BFS stores str, orchestrator stores str too)
-        resolved = []
+        seen  = set()
         for l in links:
             if isinstance(l, dict):
                 l = l.get("url") or l.get("href", "")
-            if isinstance(l, str) and l in url_set and l != url:
-                resolved.append(l)
-        # Deduplicate (one link = one vote regardless of how many times linked)
-        unique = list(dict.fromkeys(resolved))
-        outbound[url] = len(unique)
-        for target in unique:
-            inbound[target] = inbound.get(target, 0) + 1
+            if isinstance(l, str) and l in url_set and l != src and l not in seen:
+                seen.add(l)
+                out_links[src].append(l)
+                in_links[l].append(src)
+
+    # Iterative PageRank
+    pr: dict[str, float] = {u: 1.0 / N for u in urls}
+
+    for _ in range(iterations):
+        # Dangling nodes contribute their rank spread evenly across all nodes
+        dangling_sum = sum(pr[u] for u in urls if not out_links[u])
+        new_pr: dict[str, float] = {}
+        for url in urls:
+            rank_in = dangling_sum / N
+            for src in in_links[url]:
+                out_count = len(out_links[src])
+                if out_count > 0:
+                    rank_in += pr[src] / out_count
+            new_pr[url] = (1.0 - damping) / N + damping * rank_in
+        pr = new_pr
+
+    # Normalise to 0–10 scale
+    max_pr = max(pr.values()) if pr else 1.0
 
     for page in pages:
         url = page.get("url", "")
-        ib  = inbound.get(url, 0)
-        ob  = outbound.get(url, 0)
-        page["ipr"]          = round(ib / ob, 4) if ob > 0 else float(ib)
-        page["ipr_inbound"]  = ib
-        page["ipr_outbound"] = ob
+        page["ipr"]          = round(pr.get(url, 0.0) * 10.0 / max_pr, 4)
+        page["ipr_inbound"]  = len(in_links.get(url, []))
+        page["ipr_outbound"] = len(out_links.get(url, []))
 
     return domain_result
 

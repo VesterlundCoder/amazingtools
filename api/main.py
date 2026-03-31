@@ -439,36 +439,43 @@ async def ahrefs_analysis(req: AhrefsRequest):
     domain = parsed.netloc or parsed.path.strip("/")
     target = req.target if req.mode == "url" else domain
 
-    # 1) Domain Rating
+    # 1) Domain Rating — primary signal, raise if it fails
     dr_resp = await _ahrefs_get(
         "site-explorer/domain-rating",
-        {"target": domain, "date": "latest", "output": "json"},
+        {"target": domain, "date": "latest"},
         api_key,
     )
     dr = float((dr_resp.get("domain") or {}).get("domain_rating", 0))
     domain_bonus = _ahrefs_bonus(dr)
 
-    # 2) Referring domains overview (counts)
-    overview = await _ahrefs_get(
-        "site-explorer/metrics",
-        {"target": domain, "date": "latest", "output": "json"},
-        api_key,
-    )
-    metrics = overview.get("metrics") or {}
+    # 2) Referring domains count — best-effort, skip if unavailable
+    refdomains_count = 0
+    try:
+        ref_resp = await _ahrefs_get(
+            "site-explorer/refdomains",
+            {"target": domain, "limit": 1, "select": "domain"},
+            api_key,
+        )
+        refdomains_count = ref_resp.get("total", 0) or len(ref_resp.get("refdomains") or [])
+    except Exception:
+        pass
 
-    # 3) Top backlinks with per-link DR
-    bl_resp = await _ahrefs_get(
-        "site-explorer/backlinks",
-        {
-            "target":  target,
-            "limit":   50,
-            "mode":    req.mode,
-            "select":  "url_from,domain_from,domain_rating_source,anchor,nofollow,url_to",
-            "output":  "json",
-        },
-        api_key,
-    )
-    raw_links = bl_resp.get("backlinks") or []
+    # 3) Top backlinks with per-link DR — best-effort
+    raw_links: list = []
+    try:
+        bl_resp = await _ahrefs_get(
+            "site-explorer/backlinks",
+            {
+                "target":  target,
+                "limit":   50,
+                "mode":    req.mode,
+                "select":  "url_from,domain_from,domain_rating_source,anchor,nofollow,url_to",
+            },
+            api_key,
+        )
+        raw_links = bl_resp.get("backlinks") or []
+    except Exception:
+        pass
 
     enriched = []
     total_bonus = 0
@@ -495,9 +502,8 @@ async def ahrefs_analysis(req: AhrefsRequest):
         "domain_ipr_bonus":    domain_bonus,
         "total_backlink_bonus":total_bonus,
         "backlinks_count":     len(enriched),
-        "referring_domains":   metrics.get("refdomains", 0),
-        "organic_keywords":    metrics.get("organic_keywords", 0),
-        "organic_traffic":     metrics.get("organic_traffic", 0),
+        "referring_domains":   refdomains_count,
+        "organic_traffic":     0,
         "backlinks":           enriched,
     }
 
