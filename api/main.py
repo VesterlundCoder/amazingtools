@@ -394,6 +394,114 @@ async def rewrite_section(req: RewriteRequest):
     return {"rewritten": resp.choices[0].message.content.strip()}
 
 
+# ── Ahrefs integration ─────────────────────────────────────────────────────────
+
+class AhrefsRequest(BaseModel):
+    target: str        # domain or full URL
+    mode:   str = "domain"  # "domain" or "url"
+
+
+def _ahrefs_bonus(dr: float) -> int:
+    """Map Ahrefs Domain Rating (0-100) → IPR bonus (+1 to +10) per PRD table."""
+    if dr <= 0:
+        return 1
+    return min(10, int(dr // 10) + 1)
+
+
+async def _ahrefs_get(path: str, params: dict, api_key: str) -> dict:
+    try:
+        async with httpx.AsyncClient(timeout=20) as c:
+            r = await c.get(
+                f"https://api.ahrefs.com/v3/{path}",
+                params=params,
+                headers={"Authorization": f"Bearer {api_key}"},
+            )
+            r.raise_for_status()
+            return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(
+            e.response.status_code,
+            detail=f"Ahrefs API error {e.response.status_code}: {e.response.text[:300]}"
+        )
+    except Exception as e:
+        raise HTTPException(502, detail=f"Ahrefs unreachable: {e}")
+
+
+@app.post("/api/analyze/ahrefs")
+async def ahrefs_analysis(req: AhrefsRequest):
+    api_key = os.environ.get("AHREFS_API_KEY")
+    if not api_key:
+        raise HTTPException(500, detail="AHREFS_API_KEY not configured.")
+
+    from urllib.parse import urlparse
+    raw = req.target if req.target.startswith("http") else f"https://{req.target}"
+    parsed = urlparse(raw)
+    domain = parsed.netloc or parsed.path.strip("/")
+    target = req.target if req.mode == "url" else domain
+
+    # 1) Domain Rating
+    dr_resp = await _ahrefs_get(
+        "site-explorer/domain-rating",
+        {"target": domain, "date": "latest", "output": "json"},
+        api_key,
+    )
+    dr = float((dr_resp.get("domain") or {}).get("domain_rating", 0))
+    domain_bonus = _ahrefs_bonus(dr)
+
+    # 2) Referring domains overview (counts)
+    overview = await _ahrefs_get(
+        "site-explorer/metrics",
+        {"target": domain, "date": "latest", "output": "json"},
+        api_key,
+    )
+    metrics = overview.get("metrics") or {}
+
+    # 3) Top backlinks with per-link DR
+    bl_resp = await _ahrefs_get(
+        "site-explorer/backlinks",
+        {
+            "target":  target,
+            "limit":   50,
+            "mode":    req.mode,
+            "select":  "url_from,domain_from,domain_rating_source,anchor,nofollow,url_to",
+            "output":  "json",
+        },
+        api_key,
+    )
+    raw_links = bl_resp.get("backlinks") or []
+
+    enriched = []
+    total_bonus = 0
+    for bl in raw_links:
+        dr_src = float(bl.get("domain_rating_source") or 0)
+        bonus  = _ahrefs_bonus(dr_src)
+        total_bonus += bonus
+        enriched.append({
+            "url_from":    bl.get("url_from", ""),
+            "domain_from": bl.get("domain_from", ""),
+            "dr":          round(dr_src, 1),
+            "bonus":       bonus,
+            "anchor":      bl.get("anchor", ""),
+            "nofollow":    bool(bl.get("nofollow", False)),
+            "url_to":      bl.get("url_to", ""),
+        })
+
+    enriched.sort(key=lambda x: x["dr"], reverse=True)
+
+    return {
+        "domain":              domain,
+        "target":              target,
+        "domain_rating":       round(dr, 1),
+        "domain_ipr_bonus":    domain_bonus,
+        "total_backlink_bonus":total_bonus,
+        "backlinks_count":     len(enriched),
+        "referring_domains":   metrics.get("refdomains", 0),
+        "organic_keywords":    metrics.get("organic_keywords", 0),
+        "organic_traffic":     metrics.get("organic_traffic", 0),
+        "backlinks":           enriched,
+    }
+
+
 # ── AI analysis ───────────────────────────────────────────────────────────────
 
 def _build_prompt(results: dict) -> str:

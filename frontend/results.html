@@ -115,6 +115,7 @@
           <button class="tab-btn" onclick="showSection('issues',this)">Issues <span id="issue-count-badge"></span></button>
           <button class="tab-btn" onclick="showSection('pages',this)">All Pages</button>
           <button class="tab-btn" id="ipr-tab-btn" onclick="showSection('ipr',this)" style="display:none">Link Graph (IPR)</button>
+          <button class="tab-btn" onclick="showSection('authority',this)">Authority</button>
         </div>
 
         <!-- Overview -->
@@ -135,6 +136,62 @@
         <!-- Issues -->
         <div id="section-issues" style="padding:24px;display:none">
           <div id="issues-content"></div>
+        </div>
+
+        <!-- Authority (Ahrefs) -->
+        <div id="section-authority" style="padding:24px;display:none">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px">
+            <div>
+              <p style="font-size:13px;font-weight:700;color:#101010;margin:0 0 4px">External Authority — Ahrefs</p>
+              <p style="font-size:12px;color:#888;margin:0">Domain Rating, referring domains, and backlink bonus scores for the IPR formula.</p>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center" id="authority-controls">
+              <select id="ahrefs-mode" style="border:1px solid #e2e8f0;border-radius:7px;padding:6px 10px;font-size:12px;outline:none">
+                <option value="domain">Domain-level</option>
+                <option value="url">Specific URL</option>
+              </select>
+              <button onclick="fetchAhrefs()" id="ahrefs-btn"
+                style="background:#101010;color:#fff;border:none;border-radius:8px;padding:7px 18px;font-size:13px;font-weight:600;cursor:pointer">
+                Fetch Ahrefs Data
+              </button>
+            </div>
+          </div>
+
+          <!-- Note about PageSpeed -->
+          <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;font-size:12px;color:#92400e;margin-bottom:20px">
+            <strong>Note:</strong> Ahrefs provides backlink/DR data only — not PageSpeed or Core Web Vitals. For CWV, a Google PageSpeed Insights API key is required (added to todo).
+          </div>
+
+          <div id="authority-loading" style="display:none;text-align:center;padding:40px;color:#aaa;font-size:14px">
+            <div style="display:inline-flex;gap:4px;margin-bottom:10px">
+              <span style="width:6px;height:6px;border-radius:50%;background:#0bb4aa;animation:pulse 1.4s infinite"></span>
+              <span style="width:6px;height:6px;border-radius:50%;background:#0bb4aa;animation:pulse 1.4s .2s infinite"></span>
+              <span style="width:6px;height:6px;border-radius:50%;background:#0bb4aa;animation:pulse 1.4s .4s infinite"></span>
+            </div>
+            <p style="margin:0">Fetching from Ahrefs API…</p>
+          </div>
+          <div id="authority-error" style="display:none;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:14px;color:#dc2626;font-size:13px"></div>
+          <div id="authority-content" style="display:none">
+            <!-- Scorecard -->
+            <div id="authority-scorecard" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:14px;margin-bottom:24px"></div>
+            <!-- DR Bonus table -->
+            <div style="margin-bottom:20px">
+              <p style="font-size:13px;font-weight:700;color:#101010;margin:0 0 10px">Top Backlinks <span id="bl-count" style="color:#888;font-weight:400;font-size:12px"></span></p>
+              <div style="overflow-x:auto">
+                <table id="ahrefs-table">
+                  <thead><tr>
+                    <th>Linking Domain</th>
+                    <th style="text-align:center">DR</th>
+                    <th style="text-align:center">IPR Bonus</th>
+                    <th>Anchor Text</th>
+                    <th style="text-align:center">Follow</th>
+                    <th style="min-width:200px">Linking URL</th>
+                  </tr></thead>
+                  <tbody id="ahrefs-tbody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- IPR / Link Graph -->
@@ -239,11 +296,92 @@
 
   /* ── Section tabs ── */
   function showSection(name, btn) {
-    ['overview','onpage','links','issues','pages','ipr'].forEach(s => {
+    ['overview','onpage','links','issues','pages','ipr','authority'].forEach(s => {
       document.getElementById(`section-${s}`).style.display = s === name ? '' : 'none';
     });
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
+  }
+
+  /* ── Ahrefs / Authority ── */
+  async function fetchAhrefs() {
+    const domain = currentDomain;
+    if (!domain) return;
+    const mode = document.getElementById('ahrefs-mode').value;
+    const btn  = document.getElementById('ahrefs-btn');
+    btn.disabled    = true;
+    btn.textContent = 'Fetching…';
+    document.getElementById('authority-loading').style.display = 'block';
+    document.getElementById('authority-error').style.display   = 'none';
+    document.getElementById('authority-content').style.display = 'none';
+
+    try {
+      const r = await fetch(`${API_BASE}/api/analyze/ahrefs`, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ target: domain, mode }),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${r.status}`);
+      }
+      const data = await r.json();
+      renderAuthority(data);
+    } catch(e) {
+      document.getElementById('authority-error').style.display = 'block';
+      document.getElementById('authority-error').textContent = `Ahrefs error: ${e.message}`;
+    } finally {
+      document.getElementById('authority-loading').style.display = 'none';
+      btn.disabled    = false;
+      btn.textContent = 'Fetch Ahrefs Data';
+    }
+  }
+
+  function renderAuthority(d) {
+    const sc = document.getElementById('authority-scorecard');
+    function drColor(dr) {
+      if (dr >= 70) return '#059669';
+      if (dr >= 40) return '#0bb4aa';
+      if (dr >= 20) return '#f59e0b';
+      return '#dc2626';
+    }
+    const drC = drColor(d.domain_rating);
+    sc.innerHTML = [
+      { val: d.domain_rating, label: 'Domain Rating', color: drC },
+      { val: `+${d.domain_ipr_bonus}`, label: 'DR IPR Bonus', color: '#0bb4aa' },
+      { val: d.referring_domains || '—', label: 'Referring Domains', color: '#101010' },
+      { val: d.backlinks_count, label: 'Backlinks (sample)', color: '#101010' },
+      { val: `+${d.total_backlink_bonus}`, label: 'Total Backlink Bonus', color: '#059669' },
+      { val: d.organic_traffic || '—', label: 'Organic Traffic', color: '#101010' },
+    ].map(item => `
+      <div class="metric-card">
+        <div class="metric-val" style="color:${item.color}">${item.val}</div>
+        <div class="metric-label">${item.label}</div>
+      </div>
+    `).join('');
+
+    document.getElementById('bl-count').textContent = `(top ${d.backlinks_count})`;
+
+    function bonusBadge(bonus) {
+      const color = bonus >= 8 ? '#059669' : bonus >= 5 ? '#0bb4aa' : '#f59e0b';
+      return `<span style="background:${color}10;color:${color};border:1px solid ${color}40;padding:1px 8px;border-radius:9999px;font-size:11px;font-weight:700">+${bonus}</span>`;
+    }
+
+    document.getElementById('ahrefs-tbody').innerHTML = d.backlinks.map(bl => {
+      const drC2 = drColor(bl.dr);
+      return `<tr>
+        <td style="font-weight:500;font-size:12px">${esc(bl.domain_from || bl.url_from.split('/')[2] || bl.url_from)}</td>
+        <td style="text-align:center;font-weight:700;color:${drC2}">${bl.dr}</td>
+        <td style="text-align:center">${bonusBadge(bl.bonus)}</td>
+        <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:#555">${esc(bl.anchor || '—')}</td>
+        <td style="text-align:center;font-size:12px">${bl.nofollow ? '<span style="color:#b45309">nofollow</span>' : '<span style="color:#059669">dofollow</span>'}</td>
+        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+          <a href="${bl.url_from}" target="_blank" style="color:#0bb4aa;font-size:11px">${esc(bl.url_from)}</a>
+        </td>
+      </tr>`;
+    }).join('');
+
+    document.getElementById('authority-content').style.display = 'block';
   }
 
   /* ── IPR view toggle ── */
