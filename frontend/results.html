@@ -113,6 +113,7 @@
           <button class="tab-btn" onclick="showSection('links',this)">Links</button>
           <button class="tab-btn" onclick="showSection('issues',this)">Issues <span id="issue-count-badge"></span></button>
           <button class="tab-btn" onclick="showSection('pages',this)">All Pages</button>
+          <button class="tab-btn" id="ipr-tab-btn" onclick="showSection('ipr',this)" style="display:none">Link Graph (IPR)</button>
         </div>
 
         <!-- Overview -->
@@ -133,6 +134,25 @@
         <!-- Issues -->
         <div id="section-issues" style="padding:24px;display:none">
           <div id="issues-content"></div>
+        </div>
+
+        <!-- IPR -->
+        <div id="section-ipr" style="padding:0;display:none">
+          <div style="padding:16px 24px;border-bottom:1px solid #f1f5f9">
+            <p style="font-size:13px;color:#555;margin:0">Internal PageRank (IPR) = inbound contextual links ÷ outbound contextual links. Higher score = more link equity flowing into this page.</p>
+          </div>
+          <div style="overflow-x:auto">
+            <table id="ipr-table">
+              <thead><tr>
+                <th style="min-width:280px">URL</th>
+                <th style="text-align:center">IPR Score</th>
+                <th style="text-align:center">Inbound</th>
+                <th style="text-align:center">Outbound</th>
+                <th style="min-width:160px">Equity Bar</th>
+              </tr></thead>
+              <tbody id="ipr-tbody"></tbody>
+            </table>
+          </div>
         </div>
 
         <!-- All pages -->
@@ -203,11 +223,41 @@
 
   /* ── Section tabs ── */
   function showSection(name, btn) {
-    ['overview','onpage','links','issues','pages'].forEach(s => {
+    ['overview','onpage','links','issues','pages','ipr'].forEach(s => {
       document.getElementById(`section-${s}`).style.display = s === name ? '' : 'none';
     });
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
+  }
+
+  /* ── IPR rendering ── */
+  function renderIPR(pages) {
+    const withIPR = pages.filter(p => p.ipr !== undefined);
+    if (!withIPR.length) return;
+
+    document.getElementById('ipr-tab-btn').style.display = '';
+
+    const sorted = [...withIPR].sort((a, b) => b.ipr - a.ipr);
+    const maxIPR = sorted[0]?.ipr || 1;
+
+    document.getElementById('ipr-tbody').innerHTML = sorted.map(p => {
+      const barPct = Math.round((p.ipr / maxIPR) * 100);
+      const barColor = p.ipr >= 1 ? '#059669' : p.ipr >= 0.5 ? '#0bb4aa' : '#f59e0b';
+      const shortUrl = p.url.replace(/^https?:\/\/[^/]+/, '') || '/';
+      return `<tr>
+        <td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+          <a href="${p.url}" target="_blank" style="color:#0bb4aa;font-size:12px">${esc(shortUrl)}</a>
+        </td>
+        <td style="text-align:center;font-weight:700;color:${barColor}">${p.ipr.toFixed(3)}</td>
+        <td style="text-align:center;color:#059669;font-weight:600">${p.ipr_inbound}</td>
+        <td style="text-align:center;color:#888">${p.ipr_outbound}</td>
+        <td>
+          <div style="background:#e2e8f0;border-radius:4px;height:8px;overflow:hidden">
+            <div style="background:${barColor};height:100%;width:${barPct}%;border-radius:4px;transition:width .3s"></div>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
   }
 
   /* ── Status badge ── */
@@ -475,6 +525,9 @@
     allPagesData = data.pages || [];
     document.getElementById('pages-count-label').textContent = `${allPagesData.length} pages`;
     renderPagesTable(allPagesData);
+
+    /* IPR tab — only show if data was calculated */
+    renderIPR(allPagesData);
 
     /* Comparison */
     buildComparison();

@@ -110,6 +110,8 @@ class CrawlRequest(BaseModel):
     max_pages:       int       = 100
     check_externals: bool      = True
     respect_robots:  bool      = True
+    use_playwright:  bool      = False
+    calculate_ipr:   bool      = False
 
 
 class JobSummary(BaseModel):
@@ -125,7 +127,8 @@ class JobSummary(BaseModel):
 # ── Background crawl task ─────────────────────────────────────────────────────
 
 def run_crawl(job_id: str, client_url: str, competitor_urls: list[str],
-              max_pages: int, check_externals: bool, respect_robots: bool):
+              max_pages: int, check_externals: bool, respect_robots: bool,
+              use_playwright: bool = False, calculate_ipr: bool = False):
 
     db_update(job_id, status="running", started_at=datetime.now(timezone.utc).isoformat())
     total_pages = 0
@@ -143,6 +146,8 @@ def run_crawl(job_id: str, client_url: str, competitor_urls: list[str],
             check_externals  = check_externals,
             respect_robots   = respect_robots,
             progress_callback= progress,
+            use_playwright   = use_playwright,
+            calculate_ipr    = calculate_ipr,
         )
 
         # results is already dict[url -> plain dict]
@@ -188,7 +193,7 @@ def start_crawl(req: CrawlRequest, background_tasks: BackgroundTasks):
             raise HTTPException(400, detail=f"Invalid competitor URL: {u}")
     if len(req.competitor_urls) > 5:
         raise HTTPException(400, detail="Maximum 5 competitor URLs allowed.")
-    req.max_pages = max(10, min(500, req.max_pages))
+    req.max_pages = max(10, req.max_pages)  # no upper cap: 99999 = all pages
 
     job_id = str(uuid.uuid4())[:8]
     now    = datetime.now(timezone.utc).isoformat()
@@ -206,6 +211,7 @@ def start_crawl(req: CrawlRequest, background_tasks: BackgroundTasks):
         run_crawl, job_id,
         req.client_url, req.competitor_urls,
         req.max_pages, req.check_externals, req.respect_robots,
+        req.use_playwright, req.calculate_ipr,
     )
 
     return {"id": job_id, "status": "pending", "created_at": now}

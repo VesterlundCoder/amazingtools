@@ -446,7 +446,8 @@ def _build_summary_from_pages(pages: list[dict]) -> dict:
 
 
 async def _run_orchestrator(start_url: str, max_pages: int,
-                             respect_robots: bool, progress_callback) -> dict:
+                             respect_robots: bool, progress_callback,
+                             use_playwright: bool = False) -> dict:
     done_count = [0]
 
     def on_page(_page_record):
@@ -454,6 +455,7 @@ async def _run_orchestrator(start_url: str, max_pages: int,
         if progress_callback:
             progress_callback(done_count[0])
 
+    render_mode = "playwright" if use_playwright else "none"
     orc = CrawlOrchestrator(
         site_id=start_url,
         domain=start_url,
@@ -462,7 +464,7 @@ async def _run_orchestrator(start_url: str, max_pages: int,
         max_depth=10,
         max_concurrency=5,
         rate_limit_rps=2.0,
-        render_mode="none",
+        render_mode=render_mode,
         respect_robots=respect_robots,
         on_page_complete=on_page,
     )
@@ -474,13 +476,15 @@ def _orchestrator_crawl_domain(
     max_pages: int = 100,
     respect_robots: bool = True,
     progress_callback=None,
+    use_playwright: bool = False,
 ) -> dict:
     """Crawl one domain via seotracker's async orchestrator. Returns plain dict."""
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
         raw = loop.run_until_complete(
-            _run_orchestrator(start_url, max_pages, respect_robots, progress_callback)
+            _run_orchestrator(start_url, max_pages, respect_robots,
+                              progress_callback, use_playwright)
         )
     finally:
         loop.close()
@@ -489,13 +493,16 @@ def _orchestrator_crawl_domain(
     links_raw   = raw.get("links", [])
     status_map  = {p.get("url"): p.get("status_code") for p in pages_raw}
 
-    # Find broken internal links per page
+    # Build internal link map: source -> [dest, ...]
+    internal_by_src: dict[str, list[str]] = {}
     broken_by_source: dict[str, list] = {}
     for link in links_raw:
-        src  = link.get("source_url", "")
-        dest = link.get("dest_url", "")
         if not link.get("is_internal"):
             continue
+        src  = link.get("source_url", "")
+        dest = link.get("dest_url", "")
+        if src and dest:
+            internal_by_src.setdefault(src, []).append(dest)
         code = status_map.get(dest, 200) or 200
         if code >= 400:
             broken_by_source.setdefault(src, []).append({"url": dest, "status": code})
@@ -513,6 +520,7 @@ def _orchestrator_crawl_domain(
             "meta_description":     p.get("meta_description"),
             "canonical":            p.get("canonical_url"),
             "noindex":              p.get("is_noindex", False),
+            "internal_links":       internal_by_src.get(url, []),
             "internal_links_count": p.get("internal_links_count", 0),
             "external_links_count": p.get("external_links_count", 0),
             "images_without_alt":   p.get("img_missing_alt", 0),
@@ -533,6 +541,48 @@ def _orchestrator_crawl_domain(
     return {"domain": start_url, "summary": summary, "pages": pages}
 
 
+# ── Internal PageRank (IPR) ─────────────────────────────────────────────────
+
+def compute_ipr(domain_result: dict) -> dict:
+    """
+    Add 'ipr', 'ipr_inbound', 'ipr_outbound' to every page.
+    IPR = inbound_internal_links / max(1, outbound_internal_links)
+    Only counts links between pages that were actually crawled.
+    Modifies domain_result in place and returns it.
+    """
+    pages   = domain_result.get("pages", [])
+    url_set = {p.get("url", "") for p in pages}
+
+    inbound:  dict[str, int] = {p.get("url", ""): 0 for p in pages}
+    outbound: dict[str, int] = {}
+
+    for page in pages:
+        url   = page.get("url", "")
+        links = page.get("internal_links") or []
+        # Resolve dicts (basic BFS stores str, orchestrator stores str too)
+        resolved = []
+        for l in links:
+            if isinstance(l, dict):
+                l = l.get("url") or l.get("href", "")
+            if isinstance(l, str) and l in url_set and l != url:
+                resolved.append(l)
+        # Deduplicate (one link = one vote regardless of how many times linked)
+        unique = list(dict.fromkeys(resolved))
+        outbound[url] = len(unique)
+        for target in unique:
+            inbound[target] = inbound.get(target, 0) + 1
+
+    for page in pages:
+        url = page.get("url", "")
+        ib  = inbound.get(url, 0)
+        ob  = outbound.get(url, 0)
+        page["ipr"]          = round(ib / ob, 4) if ob > 0 else float(ib)
+        page["ipr_inbound"]  = ib
+        page["ipr_outbound"] = ob
+
+    return domain_result
+
+
 # ── Public API ──────────────────────────────────────────────────────────────
 
 def crawl_domain(
@@ -541,13 +591,19 @@ def crawl_domain(
     check_externals: bool = True,
     respect_robots: bool = True,
     progress_callback=None,
+    use_playwright: bool = False,
+    calculate_ipr: bool = False,
 ) -> dict:
     """Crawl a single domain. Returns a plain dict (domain, summary, pages)."""
     if _HAS_ORCHESTRATOR:
         try:
-            return _orchestrator_crawl_domain(
-                start_url, max_pages, respect_robots, progress_callback
+            result = _orchestrator_crawl_domain(
+                start_url, max_pages, respect_robots, progress_callback,
+                use_playwright=use_playwright,
             )
+            if calculate_ipr:
+                compute_ipr(result)
+            return result
         except Exception as e:
             logger.error("Orchestrator failed for %s: %s — falling back", start_url, e)
 
@@ -556,7 +612,10 @@ def crawl_domain(
         start_url, max_pages, check_externals, respect_robots,
         lambda n: progress_callback(n) if progress_callback else None,
     )
-    return _domain_result_to_dict(dr)
+    result = _domain_result_to_dict(dr)
+    if calculate_ipr:
+        compute_ipr(result)
+    return result
 
 
 def crawl_multiple(
@@ -566,6 +625,8 @@ def crawl_multiple(
     check_externals: bool = True,
     respect_robots: bool = True,
     progress_callback=None,
+    use_playwright: bool = False,
+    calculate_ipr: bool = False,
 ) -> dict[str, dict]:
     """
     Crawl client + all competitors. Returns dict[url -> domain_result_dict].
@@ -587,6 +648,8 @@ def crawl_multiple(
                 check_externals=check_externals,
                 respect_robots=respect_robots,
                 progress_callback=cb,
+                use_playwright=use_playwright,
+                calculate_ipr=calculate_ipr,
             )
         except Exception as e:
             logger.error("Failed to crawl %s: %s", url, e)

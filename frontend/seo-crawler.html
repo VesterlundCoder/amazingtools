@@ -113,6 +113,18 @@
             Respect robots.txt
           </label>
         </div>
+        <div>
+          <label style="text-transform:none;font-size:12px;font-weight:500;color:#555;display:flex;align-items:center;gap:8px;cursor:pointer" title="Crawl JS-rendered pages using headless Chromium (slower)">
+            <input type="checkbox" id="use-playwright" style="width:15px;height:15px;accent-color:#0bb4aa"/>
+            JS rendering (Playwright)
+          </label>
+        </div>
+        <div>
+          <label style="text-transform:none;font-size:12px;font-weight:500;color:#0bb4aa;display:flex;align-items:center;gap:8px;cursor:pointer" title="Calculate Internal PageRank for each page after crawling">
+            <input type="checkbox" id="calculate-ipr" style="width:15px;height:15px;accent-color:#0bb4aa"/>
+            Calculate Internal PageRank (IPR)
+          </label>
+        </div>
       </div>
     </div>
 
@@ -203,10 +215,11 @@
     const compInputs = [...document.querySelectorAll('.comp-input')]
       .map(i => i.value.trim()).filter(Boolean);
 
-    const maxPages   = parseInt(document.getElementById('max-pages').value) || 100;
-    // 99999 signals "all pages" to the backend
-    const checkExt   = document.getElementById('check-externals').checked;
-    const respRobots = document.getElementById('respect-robots').checked;
+    const maxPages      = parseInt(document.getElementById('max-pages').value) || 100;
+    const checkExt      = document.getElementById('check-externals').checked;
+    const respRobots    = document.getElementById('respect-robots').checked;
+    const usePlaywright = document.getElementById('use-playwright').checked;
+    const calcIPR       = document.getElementById('calculate-ipr').checked;
 
     const btn = document.getElementById('start-btn');
     const msg = document.getElementById('start-msg');
@@ -222,7 +235,9 @@
           competitor_urls:  compInputs,
           max_pages:        maxPages,
           check_externals:  checkExt,
-          respect_robots:   respRobots
+          respect_robots:   respRobots,
+          use_playwright:   usePlaywright,
+          calculate_ipr:    calcIPR,
         })
       });
 
