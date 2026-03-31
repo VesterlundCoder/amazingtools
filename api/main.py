@@ -515,80 +515,160 @@ def _build_prompt(results: dict) -> str:
     client_url = urls[0]
     client = results[client_url]
     s = client.get("summary", {})
+    pages = client.get("pages", [])
 
     lines = [
-        "Du är en expert SEO-konsult. Analysera crawldata nedan och svara ENBART på svenska.\n",
+        "Du är en expert SEO-konsult. Analysera all crawldata nedan och svara ENBART på svenska.\n",
         f"## KLIENTENS WEBBPLATS: {client_url}",
         f"- Crawlade sidor: {s.get('total_pages', 0)}",
-        f"- HTTP 200: {s.get('pages_200', 0)}  |  4xx-fel: {s.get('pages_4xx', 0)}  |  5xx-fel: {s.get('pages_5xx', 0)}",
+        f"- HTTP 200: {s.get('pages_200', 0)}  |  3xx: {s.get('pages_3xx', 0)}  |  4xx-fel: {s.get('pages_4xx', 0)}  |  5xx-fel: {s.get('pages_5xx', 0)}",
         f"- Saknar title-tag: {s.get('missing_titles', 0)}  |  Dubblerade titlar: {s.get('duplicate_titles', 0)}",
         f"- Saknar H1: {s.get('missing_h1', 0)}  |  Dubblerade H1: {s.get('duplicate_h1', 0)}",
         f"- Saknar meta description: {s.get('missing_meta_desc', 0)}  |  För lång: {s.get('long_meta_desc', 0)}  |  För kort: {s.get('short_meta_desc', 0)}",
         f"- Saknar canonical: {s.get('missing_canonical', 0)}  |  Noindex-sidor: {s.get('noindex_count', 0)}",
-        f"- Brutna länkar: {s.get('broken_links', 0)}",
+        f"- Totalt brutna interna länkar: {s.get('broken_links', 0)}",
         f"- Bilder utan alt-text: {s.get('images_without_alt', 0)}",
-        f"- Totalt interna länkar: {s.get('total_internal_links', 0)}",
+        f"- Totalt interna länkar (crawlen): {s.get('total_internal_links', 0)}",
+        f"- Föräldralösa sidor (0 inbound): {s.get('orphaned_pages', 0)}",
         "",
     ]
 
-    # Top pages with issues
-    pages = client.get("pages", [])
-    problem_pages = sorted(
-        pages,
-        key=lambda p: (
-            (1 if not p.get("title") else 0) +
-            (1 if not p.get("h1") else 0) +
-            len(p.get("broken_links") or []) +
-            (1 if p.get("noindex") else 0)
-        ),
-        reverse=True
-    )[:5]
-    if problem_pages:
-        lines.append("### Sidor med flest problem (topp 5):")
-        for p in problem_pages:
-            issues = []
-            if not p.get("title"):        issues.append("saknar title")
-            if not p.get("h1"):           issues.append("saknar H1")
-            if not p.get("meta_description"): issues.append("saknar meta desc")
-            if p.get("noindex"):          issues.append("noindex")
-            bl = len(p.get("broken_links") or [])
-            if bl:                        issues.append(f"{bl} brutna länkar")
-            if issues:
-                lines.append(f"  - {p.get('url', '')}: {', '.join(issues)}")
+    # ── Internal PageRank (IPR) ──────────────────────────────────────────────
+    ipr_pages = [p for p in pages if p.get("ipr") is not None]
+    if ipr_pages:
+        sorted_ipr = sorted(ipr_pages, key=lambda p: p.get("ipr", 0), reverse=True)
+        lines.append("### Internal PageRank (IPR) — topp 10 sidor (högst länkauktoritet):")
+        for p in sorted_ipr[:10]:
+            ib = p.get("ipr_inbound", "?")
+            ob = p.get("ipr_outbound", "?")
+            lines.append(f"  {p.get('ipr', 0):.3f}  ib={ib} ob={ob}  {p.get('url','')}")
+
+        bottom_ipr = [p for p in sorted_ipr if p.get("ipr_inbound", 0) == 0 and p.get("status_code") == 200]
+        if bottom_ipr:
+            lines.append(f"\n### Föräldralösa sidor — 0 inbound interna länkar ({len(bottom_ipr)} st), urval:")
+            for p in bottom_ipr[:8]:
+                lines.append(f"  - {p.get('url','')}")
+
+        # Link sink pages (many inbound, few outbound — potential PageRank drain)
+        sinks = sorted(
+            [p for p in ipr_pages if p.get("ipr_outbound", 0) == 0 and p.get("ipr_inbound", 0) > 1],
+            key=lambda p: p.get("ipr_inbound", 0), reverse=True
+        )[:5]
+        if sinks:
+            lines.append("\n### Länk-sänkor — sidor med inbound men 0 outbound (tappar PageRank):")
+            for p in sinks:
+                lines.append(f"  ib={p.get('ipr_inbound')}  {p.get('url','')}")
         lines.append("")
 
-    # Competitor summaries
+    # ── Broken links with URLs ───────────────────────────────────────────────
+    broken_detail = []
+    for p in pages:
+        for bl in (p.get("broken_links") or []):
+            broken_detail.append((p.get("url", ""), bl.get("url", ""), bl.get("status", "?")))
+    if broken_detail:
+        lines.append(f"### Brutna interna länkar ({len(broken_detail)} st) — urval topp 10:")
+        for src, dst, code in broken_detail[:10]:
+            lines.append(f"  [{code}] {dst}  (länkad från: {src})")
+        lines.append("")
+
+    # ── Thin content ────────────────────────────────────────────────────────
+    thin = sorted(
+        [p for p in pages if p.get("word_count", 0) < 200 and p.get("status_code") == 200
+         and not p.get("noindex")],
+        key=lambda p: p.get("word_count", 0)
+    )[:8]
+    if thin:
+        lines.append(f"### Tunt innehåll — sidor under 200 ord ({len(thin)} st urval):")
+        for p in thin:
+            lines.append(f"  {p.get('word_count', 0)} ord  {p.get('url','')}")
+        lines.append("")
+
+    # ── Pages with critical issues (top 10) ─────────────────────────────────
+    def issue_score(p):
+        return (
+            (1 if not p.get("title") else 0) +
+            (1 if not p.get("h1") else 0) +
+            (1 if not p.get("meta_description") else 0) +
+            len(p.get("broken_links") or []) * 2 +
+            (1 if p.get("noindex") else 0)
+        )
+    problem_pages = sorted(pages, key=issue_score, reverse=True)[:10]
+    has_issues = [p for p in problem_pages if issue_score(p) > 0]
+    if has_issues:
+        lines.append("### Sidor med flest SEO-problem (topp 10):")
+        for p in has_issues:
+            issues = []
+            if not p.get("title"):            issues.append("saknar title")
+            if not p.get("h1"):               issues.append("saknar H1")
+            if not p.get("meta_description"): issues.append("saknar meta desc")
+            if p.get("noindex"):              issues.append("noindex")
+            bl = len(p.get("broken_links") or [])
+            if bl:                            issues.append(f"{bl} brutna utgående")
+            wc = p.get("word_count", 0)
+            if 0 < wc < 200:                  issues.append(f"tunt innehåll ({wc} ord)")
+            if issues:
+                lines.append(f"  - {p.get('url','')}: {', '.join(issues)}")
+        lines.append("")
+
+    # ── External links summary ───────────────────────────────────────────────
+    total_ext = sum(p.get("external_links_count", 0) for p in pages)
+    pages_with_ext = [p for p in pages if p.get("external_links_count", 0) > 3]
+    lines.append(f"### Externa länkar: totalt {total_ext} utgående externa länkar")
+    if pages_with_ext:
+        top_ext = sorted(pages_with_ext, key=lambda p: p.get("external_links_count", 0), reverse=True)[:5]
+        lines.append("  Sidor med flest externa utgående länkar:")
+        for p in top_ext:
+            lines.append(f"  - {p.get('external_links_count')} ext  {p.get('url','')}")
+    lines.append("")
+
+    # ── PageSpeed note ───────────────────────────────────────────────────────
+    lines.append("### PageSpeed / Core Web Vitals: EJ INTEGRERAT ÄN")
+    lines.append("  (Google PageSpeed Insights API-integration planeras — LCP, CLS, INP, TTFB kommer)")
+    lines.append("")
+
+    # ── Competitor summaries ─────────────────────────────────────────────────
     comp_urls = urls[1:]
     if comp_urls:
         lines.append("## KONKURRENTDATA:")
         for cu in comp_urls:
             cd = results.get(cu, {})
             cs = cd.get("summary", {})
+            cp  = cd.get("pages", [])
+            ci  = [p for p in cp if p.get("ipr") is not None]
             lines.append(f"\n### {cu}")
             lines.append(f"- Sidor: {cs.get('total_pages', 0)}")
             lines.append(f"- Saknar title: {cs.get('missing_titles', 0)}  |  Saknar H1: {cs.get('missing_h1', 0)}")
             lines.append(f"- Saknar meta desc: {cs.get('missing_meta_desc', 0)}")
             lines.append(f"- Brutna länkar: {cs.get('broken_links', 0)}")
             lines.append(f"- Bilder utan alt: {cs.get('images_without_alt', 0)}")
+            lines.append(f"- Föräldralösa sidor: {cs.get('orphaned_pages', 0)}")
+            lines.append(f"- Totalt interna länkar: {cs.get('total_internal_links', 0)}")
+            if ci:
+                top_c = max(ci, key=lambda p: p.get("ipr", 0))
+                lines.append(f"- Högsta IPR-sida: {top_c.get('ipr', 0):.3f}  {top_c.get('url','')}")
         lines.append("")
 
     lines.append("""
-Svara i EXAKT detta format (håll dig till rubrikerna):
+Svara i EXAKT detta format (håll dig strikt till rubrikerna, ge konkreta URL-exempel där relevant):
 
 ## Sammanfattning
-[3-4 meningar om klientens övergripande SEO-status]
+[4-5 meningar om klientens övergripande SEO-status — inkludera starka och svaga sidor]
 
 ## Topprioriteringar
-1. [Viktigaste åtgärden — konkret och specifik]
-2. [Nästa åtgärd]
-3. [...]
-4. [...]
-5. [...]
-6. [...]
-7. [...]
+1. [Viktigaste åtgärden — konkret, specifik, nämn URL om relevant]
+2. [Intern länkstruktur / IPR-optimering — specifika sidor att åtgärda]
+3. [Tekniska SEO-problem]
+4. [Innehållskvalitet / tunt innehåll]
+5. [Externa länkar / länkprofil]
+6. [Meta-data och on-page SEO]
+7. [PageSpeed — förbered för integration, vad att tänka på nu]
+8. [Övrigt med stor potential]
+
+## Intern länkstrategi
+[Specifika rekommendationer för IPR-optimering: vilka sidor behöver mer inbound-länkar, vilka är länksänkor, hur fördela länkauktoriteten bättre. Nämn konkreta URL:er.]
 
 ## Konkurrentanalys
-[Jämför klienten med konkurrenterna. Vad gör konkurrenterna bättre? Var har klienten fördelar? Vad kan klienten lära sig?]
+[Jämför klienten med konkurrenterna. Vad gör konkurrenterna bättre? Var har klienten fördelar? Kvantifiera skillnaderna med data från ovan.]
 """)
     return "\n".join(lines)
 
@@ -620,7 +700,7 @@ def analyze_job(job_id: str):
             {"role": "system", "content": "Du är en expert SEO-konsult som ger konkreta, handlingsinriktade råd på svenska."},
             {"role": "user",   "content": prompt},
         ],
-        max_tokens=1500,
+        max_tokens=2500,
         temperature=0.4,
     )
 
