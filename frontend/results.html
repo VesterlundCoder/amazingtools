@@ -83,7 +83,10 @@
           <h1 style="font-size:1.5rem;font-weight:800;color:#101010;letter-spacing:-0.5px;margin:6px 0 4px" id="results-title">Crawl Results</h1>
           <p style="font-size:13px;color:#888" id="results-meta"></p>
         </div>
-        <a href="#" id="export-btn" onclick="exportCSV()" style="background:#f1f5f9;border:1px solid #e2e8f0;color:#555;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:500;text-decoration:none">⬇ Export CSV</a>
+        <div style="display:flex;gap:10px;align-items:center">
+          <a href="#" id="export-btn" onclick="exportCSV()" style="background:#f1f5f9;border:1px solid #e2e8f0;color:#555;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:500;text-decoration:none">⬇ Export CSV</a>
+          <a id="mevo-btn" href="#" style="background:#101010;color:#0bb4aa;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:700;text-decoration:none;letter-spacing:.03em">MEVO.AI →</a>
+        </div>
       </div>
     </div>
   </div>
@@ -192,6 +195,7 @@
 
   const jobId = new URLSearchParams(location.search).get('job');
   if (!jobId) { location.href = 'seo-crawler.html'; }
+  document.getElementById('mevo-btn').href = `mevo-ai.html?job=${jobId}`;
 
   let jobData = null;
   let currentDomain = null;

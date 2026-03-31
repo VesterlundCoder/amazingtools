@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>MEVO.AI — SEO Analys</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config={theme:{extend:{fontFamily:{sans:['Inter','sans-serif']}}}}</script>
+  <style>
+    *{font-family:'Inter',sans-serif}
+    body{background:#0c0f14;color:#f0f4f8;min-height:100vh}
+    .nav-link{color:#aaa;font-size:14px;font-weight:500;text-decoration:none;transition:color .15s}
+    .nav-link:hover{color:#0bb4aa}
+    .logout-btn{background:none;border:1px solid #2a2f3a;color:#aaa;padding:6px 14px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s}
+    .logout-btn:hover{border-color:#0bb4aa;color:#0bb4aa}
+    .glass-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:16px;backdrop-filter:blur(10px)}
+    .teal{color:#0bb4aa}
+    .btn-generate{background:linear-gradient(135deg,#0bb4aa,#059e95);color:#fff;border:none;border-radius:10px;padding:14px 32px;font-size:15px;font-weight:700;cursor:pointer;transition:all .2s;letter-spacing:.01em}
+    .btn-generate:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(11,180,170,.4)}
+    .btn-generate:disabled{background:#1e2530;color:#555;cursor:not-allowed;transform:none;box-shadow:none}
+    .section-card{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:28px 32px;margin-bottom:20px}
+    .section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:#0bb4aa;margin-bottom:16px}
+    .priority-item{display:flex;gap:14px;align-items:flex-start;padding:14px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+    .priority-item:last-child{border-bottom:none}
+    .priority-num{min-width:28px;height:28px;background:rgba(11,180,170,.15);border:1px solid rgba(11,180,170,.3);color:#0bb4aa;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;margin-top:1px}
+    .priority-text{font-size:14px;line-height:1.65;color:#d0d8e4}
+    .dot-pulse{display:inline-flex;gap:5px;align-items:center}
+    .dot-pulse span{width:7px;height:7px;border-radius:50%;background:#0bb4aa;animation:pulse 1.4s ease-in-out infinite}
+    .dot-pulse span:nth-child(2){animation-delay:.2s}
+    .dot-pulse span:nth-child(3){animation-delay:.4s}
+    @keyframes pulse{0%,80%,100%{opacity:.2;transform:scale(.85)}40%{opacity:1;transform:scale(1)}}
+    .meta-chip{background:rgba(11,180,170,.1);border:1px solid rgba(11,180,170,.2);color:#0bb4aa;border-radius:6px;padding:3px 10px;font-size:11px;font-weight:600}
+    pre{white-space:pre-wrap;word-break:break-word}
+  </style>
+</head>
+<body>
+
+<!-- Nav -->
+<nav style="background:rgba(12,15,20,.95);border-bottom:1px solid rgba(255,255,255,.07);position:sticky;top:0;z-index:50;backdrop-filter:blur(10px)">
+  <div class="max-w-5xl mx-auto px-6 flex items-center justify-between" style="height:60px">
+    <a href="dashboard.html" style="font-weight:800;font-size:18px;color:#f0f4f8;text-decoration:none;letter-spacing:-0.5px">
+      Amazing <span class="teal">Tools</span>
+    </a>
+    <div class="flex items-center gap-6">
+      <a href="seo-crawler.html" class="nav-link">SEO Crawler</a>
+      <span class="nav-link" style="opacity:.3;cursor:not-allowed">QueryMatch</span>
+      <button class="logout-btn" onclick="logout()">Log out</button>
+    </div>
+  </div>
+</nav>
+
+<!-- Hero header -->
+<div style="background:linear-gradient(160deg,#0c1a1f 0%,#0c0f14 50%);border-bottom:1px solid rgba(11,180,170,.15);padding:52px 0 44px;position:relative;overflow:hidden">
+  <div style="position:absolute;top:-60px;right:-80px;width:400px;height:400px;background:radial-gradient(circle,rgba(11,180,170,.08) 0%,transparent 70%);pointer-events:none"></div>
+  <div class="max-w-5xl mx-auto px-6">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+      <a href="seo-crawler.html" style="font-size:12px;color:#555;text-decoration:none;font-weight:500">← Tillbaka</a>
+      <span style="color:#333">·</span>
+      <span class="meta-chip" id="job-domain-chip">Laddar…</span>
+    </div>
+    <div style="display:flex;align-items:baseline;gap:4px;margin-bottom:10px">
+      <span style="font-size:2.6rem;font-weight:900;color:#f0f4f8;letter-spacing:-2px">MEVO</span>
+      <span style="font-size:2.6rem;font-weight:900;color:#0bb4aa;letter-spacing:-2px">.AI</span>
+    </div>
+    <p style="font-size:15px;color:#667;max-width:520px;line-height:1.6;margin-bottom:28px">
+      AI-driven SEO-analys. Konkurrentjämförelse, prioriterade åtgärder och insikter — på svenska.
+    </p>
+    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+      <button class="btn-generate" id="gen-btn" onclick="generateAnalysis()">
+        ✦ Generera SEO-analys
+      </button>
+      <span style="font-size:11px;color:#444;font-weight:500">Drivs av OpenAI GPT-4o mini · Ersätts av MEVO snart</span>
+    </div>
+  </div>
+</div>
+
+<!-- Content -->
+<div class="max-w-5xl mx-auto px-6 py-10">
+
+  <!-- Idle state -->
+  <div id="state-idle" class="glass-card" style="padding:60px;text-align:center">
+    <div style="font-size:2.5rem;margin-bottom:20px">✦</div>
+    <p style="font-size:16px;font-weight:600;color:#d0d8e4;margin-bottom:8px">Redo att analysera</p>
+    <p style="font-size:14px;color:#555;max-width:380px;margin:0 auto">
+      Klicka på <strong style="color:#0bb4aa">Generera SEO-analys</strong> för att få en prioriterad åtgärdslista och konkurrentanalys på svenska.
+    </p>
+  </div>
+
+  <!-- Loading state -->
+  <div id="state-loading" style="display:none;text-align:center;padding:80px 20px">
+    <div class="dot-pulse" style="justify-content:center;margin-bottom:24px">
+      <span></span><span></span><span></span>
+    </div>
+    <p style="font-size:16px;font-weight:600;color:#d0d8e4;margin-bottom:8px">Analyserar crawldata…</p>
+    <p style="font-size:13px;color:#555">GPT-4o mini bearbetar SEO-data och konkurrentjämförelse</p>
+  </div>
+
+  <!-- Error state -->
+  <div id="state-error" style="display:none" class="glass-card" style="padding:40px;text-align:center">
+    <p style="font-size:15px;font-weight:600;color:#f87171;margin-bottom:8px">Analys misslyckades</p>
+    <p id="error-msg" style="font-size:13px;color:#888;margin-bottom:16px"></p>
+    <button onclick="generateAnalysis()" style="background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);color:#f87171;border-radius:8px;padding:8px 18px;font-size:13px;font-weight:600;cursor:pointer">Försök igen</button>
+  </div>
+
+  <!-- Result state -->
+  <div id="state-result" style="display:none">
+
+    <!-- Summary -->
+    <div class="section-card">
+      <p class="section-title">Sammanfattning</p>
+      <p id="result-summary" style="font-size:15px;line-height:1.75;color:#c8d4e0"></p>
+    </div>
+
+    <!-- Top priorities -->
+    <div class="section-card">
+      <p class="section-title">Topprioriteringar</p>
+      <div id="result-priorities"></div>
+    </div>
+
+    <!-- Competitor analysis -->
+    <div class="section-card" id="comp-section">
+      <p class="section-title">Konkurrentanalys</p>
+      <p id="result-competitors" style="font-size:14px;line-height:1.75;color:#c8d4e0"></p>
+    </div>
+
+    <!-- Regenerate -->
+    <div style="text-align:center;margin-top:32px">
+      <button onclick="generateAnalysis()" style="background:none;border:1px solid rgba(255,255,255,.1);color:#667;border-radius:8px;padding:9px 20px;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='#0bb4aa';this.style.color='#0bb4aa'" onmouseout="this.style.borderColor='rgba(255,255,255,.1)';this.style.color='#667'">
+        ↺ Generera ny analys
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<footer style="border-top:1px solid rgba(255,255,255,.06);padding:20px 0;margin-top:40px">
+  <div class="max-w-5xl mx-auto px-6" style="display:flex;justify-content:space-between;align-items:center">
+    <span style="font-size:12px;color:#333">Amazing Tools · davidvesterlund.com</span>
+    <span style="font-size:12px;color:#333">MEVO.AI v1.0 — powered by OpenAI</span>
+  </div>
+</footer>
+
+<script>
+  const API_BASE = 'https://web-production-c14f30.up.railway.app';
+
+  if (!sessionStorage.getItem('at_auth')) window.location.href = 'login.html';
+  function logout() { sessionStorage.removeItem('at_auth'); window.location.href = 'login.html'; }
+
+  const jobId = new URLSearchParams(location.search).get('job');
+  if (!jobId) location.href = 'seo-crawler.html';
+
+  /* Load job meta for the chip */
+  async function loadJobMeta() {
+    try {
+      const r = await fetch(`${API_BASE}/api/jobs/${jobId}`);
+      if (!r.ok) return;
+      const job = await r.json();
+      const host = new URL(job.client_url).hostname;
+      document.getElementById('job-domain-chip').textContent = host;
+      document.title = `MEVO.AI — ${host}`;
+    } catch { /* silent */ }
+  }
+  loadJobMeta();
+
+  /* Parse sections from GPT response */
+  function parseAnalysis(text) {
+    const sections = { summary: '', priorities: [], competitors: '' };
+
+    const summStart = text.indexOf('## Sammanfattning');
+    const prioStart = text.indexOf('## Topprioriteringar');
+    const compStart = text.indexOf('## Konkurrentanalys');
+
+    if (summStart !== -1) {
+      const end = prioStart !== -1 ? prioStart : (compStart !== -1 ? compStart : text.length);
+      sections.summary = text.slice(summStart + 18, end).trim();
+    }
+    if (prioStart !== -1) {
+      const end = compStart !== -1 ? compStart : text.length;
+      const block = text.slice(prioStart + 20, end).trim();
+      sections.priorities = block.split('\n')
+        .filter(l => /^\d+[\.\)]/.test(l.trim()))
+        .map(l => l.replace(/^\d+[\.\)]\s*/, '').trim())
+        .filter(Boolean);
+    }
+    if (compStart !== -1) {
+      sections.competitors = text.slice(compStart + 19).trim();
+    }
+
+    /* Fallback: if parsing failed, put everything in summary */
+    if (!sections.summary && !sections.priorities.length) {
+      sections.summary = text.trim();
+    }
+    return sections;
+  }
+
+  function showState(name) {
+    ['idle','loading','error','result'].forEach(s => {
+      document.getElementById(`state-${s}`).style.display = s === name ? '' : 'none';
+    });
+  }
+
+  async function generateAnalysis() {
+    const btn = document.getElementById('gen-btn');
+    btn.disabled = true;
+    btn.textContent = '⟳ Analyserar…';
+    showState('loading');
+
+    try {
+      const r = await fetch(`${API_BASE}/api/jobs/${jobId}/analyze`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${r.status}`);
+      }
+      const data = await r.json();
+      renderAnalysis(data.analysis);
+    } catch(e) {
+      document.getElementById('error-msg').textContent = e.message;
+      showState('error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '✦ Generera SEO-analys';
+    }
+  }
+
+  function renderAnalysis(text) {
+    const { summary, priorities, competitors } = parseAnalysis(text);
+
+    document.getElementById('result-summary').textContent = summary || '—';
+
+    const prioEl = document.getElementById('result-priorities');
+    if (priorities.length) {
+      prioEl.innerHTML = priorities.map((p, i) => `
+        <div class="priority-item">
+          <div class="priority-num">${i + 1}</div>
+          <div class="priority-text">${p}</div>
+        </div>
+      `).join('');
+    } else {
+      prioEl.innerHTML = '<p style="color:#555;font-size:13px">Inga prioriteringar hittades i svaret.</p>';
+    }
+
+    const compEl = document.getElementById('result-competitors');
+    if (competitors) {
+      compEl.textContent = competitors;
+      document.getElementById('comp-section').style.display = '';
+    } else {
+      document.getElementById('comp-section').style.display = 'none';
+    }
+
+    showState('result');
+  }
+
+  showState('idle');
+</script>
+</body>
+</html>

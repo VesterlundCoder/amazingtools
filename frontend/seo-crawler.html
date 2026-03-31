@@ -92,11 +92,14 @@
     <div style="margin-bottom:28px;padding:16px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0">
       <p style="font-size:12px;font-weight:600;color:#555;margin-bottom:12px">Crawl options</p>
       <div style="display:flex;flex-wrap:wrap;gap:20px">
-        <div>
-          <label style="text-transform:none;font-size:12px;font-weight:500;color:#555;display:flex;align-items:center;gap:8px;cursor:pointer">
-            <input type="number" id="max-pages" value="100" min="10" max="500" style="width:70px;padding:5px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;outline:none"/>
-            Max pages per domain
-          </label>
+        <div style="display:flex;align-items:center;gap:8px">
+          <label style="text-transform:none;font-size:12px;font-weight:500;color:#555;margin:0">Max pages per domain</label>
+          <select id="max-pages" style="border:1px solid #e2e8f0;border-radius:6px;padding:5px 10px;font-size:13px;outline:none;background:#fff;color:#101010;cursor:pointer">
+            <option value="100">100</option>
+            <option value="500">500</option>
+            <option value="1000">1 000</option>
+            <option value="99999">All pages</option>
+          </select>
         </div>
         <div>
           <label style="text-transform:none;font-size:12px;font-weight:500;color:#555;display:flex;align-items:center;gap:8px;cursor:pointer">
@@ -201,6 +204,7 @@
       .map(i => i.value.trim()).filter(Boolean);
 
     const maxPages   = parseInt(document.getElementById('max-pages').value) || 100;
+    // 99999 signals "all pages" to the backend
     const checkExt   = document.getElementById('check-externals').checked;
     const respRobots = document.getElementById('respect-robots').checked;
 
@@ -300,9 +304,12 @@
           <td style="color:#666">${j.pages_crawled ?? '—'}</td>
           <td>${statusBadge(j.status)}</td>
           <td style="color:#888;font-size:12px">${new Date(j.created_at).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</td>
-          <td>
+          <td style="white-space:nowrap">
             ${j.status === 'done'
-              ? `<a href="results.html?job=${j.id}" style="color:#0bb4aa;font-size:13px;font-weight:600;text-decoration:none">Results →</a>`
+              ? `<span style="display:flex;gap:8px;align-items:center">
+                  <a href="results.html?job=${j.id}" style="color:#0bb4aa;font-size:13px;font-weight:600;text-decoration:none">Results →</a>
+                  <a href="mevo-ai.html?job=${j.id}" style="background:#101010;color:#0bb4aa;font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px;text-decoration:none;letter-spacing:.03em">MEVO.AI</a>
+                </span>`
               : j.status === 'running'
                 ? `<span style="color:#aaa;font-size:12px">Crawling…</span>`
                 : `<span style="color:#aaa;font-size:12px">—</span>`}

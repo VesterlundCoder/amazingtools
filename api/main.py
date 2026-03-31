@@ -23,6 +23,7 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from openai import OpenAI
 from pydantic import BaseModel, HttpUrl
 
 from crawler_engine import crawl_multiple
@@ -54,9 +55,16 @@ def init_db():
             completed_at    TEXT,
             pages_crawled   INTEGER DEFAULT 0,
             error_message   TEXT,
-            results         TEXT             -- JSON
+            results         TEXT,            -- JSON
+            analysis        TEXT             -- GPT analysis text
         )
     """)
+    # Migrate existing tables that lack the analysis column
+    try:
+        conn.execute("ALTER TABLE jobs ADD COLUMN analysis TEXT")
+        conn.commit()
+    except Exception:
+        pass  # column already exists
     conn.commit()
     conn.close()
 
@@ -254,6 +262,129 @@ def get_job(job_id: str):
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
+
+
+# ── AI analysis ───────────────────────────────────────────────────────────────
+
+def _build_prompt(results: dict) -> str:
+    urls = list(results.keys())
+    client_url = urls[0]
+    client = results[client_url]
+    s = client.get("summary", {})
+
+    lines = [
+        "Du är en expert SEO-konsult. Analysera crawldata nedan och svara ENBART på svenska.\n",
+        f"## KLIENTENS WEBBPLATS: {client_url}",
+        f"- Crawlade sidor: {s.get('total_pages', 0)}",
+        f"- HTTP 200: {s.get('pages_200', 0)}  |  4xx-fel: {s.get('pages_4xx', 0)}  |  5xx-fel: {s.get('pages_5xx', 0)}",
+        f"- Saknar title-tag: {s.get('missing_titles', 0)}  |  Dubblerade titlar: {s.get('duplicate_titles', 0)}",
+        f"- Saknar H1: {s.get('missing_h1', 0)}  |  Dubblerade H1: {s.get('duplicate_h1', 0)}",
+        f"- Saknar meta description: {s.get('missing_meta_desc', 0)}  |  För lång: {s.get('long_meta_desc', 0)}  |  För kort: {s.get('short_meta_desc', 0)}",
+        f"- Saknar canonical: {s.get('missing_canonical', 0)}  |  Noindex-sidor: {s.get('noindex_count', 0)}",
+        f"- Brutna länkar: {s.get('broken_links', 0)}",
+        f"- Bilder utan alt-text: {s.get('images_without_alt', 0)}",
+        f"- Totalt interna länkar: {s.get('total_internal_links', 0)}",
+        "",
+    ]
+
+    # Top pages with issues
+    pages = client.get("pages", [])
+    problem_pages = sorted(
+        pages,
+        key=lambda p: (
+            (1 if not p.get("title") else 0) +
+            (1 if not p.get("h1") else 0) +
+            len(p.get("broken_links") or []) +
+            (1 if p.get("noindex") else 0)
+        ),
+        reverse=True
+    )[:5]
+    if problem_pages:
+        lines.append("### Sidor med flest problem (topp 5):")
+        for p in problem_pages:
+            issues = []
+            if not p.get("title"):        issues.append("saknar title")
+            if not p.get("h1"):           issues.append("saknar H1")
+            if not p.get("meta_description"): issues.append("saknar meta desc")
+            if p.get("noindex"):          issues.append("noindex")
+            bl = len(p.get("broken_links") or [])
+            if bl:                        issues.append(f"{bl} brutna länkar")
+            if issues:
+                lines.append(f"  - {p.get('url', '')}: {', '.join(issues)}")
+        lines.append("")
+
+    # Competitor summaries
+    comp_urls = urls[1:]
+    if comp_urls:
+        lines.append("## KONKURRENTDATA:")
+        for cu in comp_urls:
+            cd = results.get(cu, {})
+            cs = cd.get("summary", {})
+            lines.append(f"\n### {cu}")
+            lines.append(f"- Sidor: {cs.get('total_pages', 0)}")
+            lines.append(f"- Saknar title: {cs.get('missing_titles', 0)}  |  Saknar H1: {cs.get('missing_h1', 0)}")
+            lines.append(f"- Saknar meta desc: {cs.get('missing_meta_desc', 0)}")
+            lines.append(f"- Brutna länkar: {cs.get('broken_links', 0)}")
+            lines.append(f"- Bilder utan alt: {cs.get('images_without_alt', 0)}")
+        lines.append("")
+
+    lines.append("""
+Svara i EXAKT detta format (håll dig till rubrikerna):
+
+## Sammanfattning
+[3-4 meningar om klientens övergripande SEO-status]
+
+## Topprioriteringar
+1. [Viktigaste åtgärden — konkret och specifik]
+2. [Nästa åtgärd]
+3. [...]
+4. [...]
+5. [...]
+6. [...]
+7. [...]
+
+## Konkurrentanalys
+[Jämför klienten med konkurrenterna. Vad gör konkurrenterna bättre? Var har klienten fördelar? Vad kan klienten lära sig?]
+""")
+    return "\n".join(lines)
+
+
+@app.post("/api/jobs/{job_id}/analyze")
+def analyze_job(job_id: str):
+    conn = get_db()
+    row = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+    conn.close()
+
+    if not row:
+        raise HTTPException(404, detail="Job not found.")
+    if row["status"] != "done":
+        raise HTTPException(400, detail="Job is not finished yet.")
+    if not row["results"]:
+        raise HTTPException(400, detail="No crawl results available.")
+
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        raise HTTPException(500, detail="OPENAI_API_KEY not configured on server.")
+
+    results = json.loads(row["results"])
+    prompt = _build_prompt(results)
+
+    client = OpenAI(api_key=api_key)
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "Du är en expert SEO-konsult som ger konkreta, handlingsinriktade råd på svenska."},
+            {"role": "user",   "content": prompt},
+        ],
+        max_tokens=1500,
+        temperature=0.4,
+    )
+
+    analysis_text = response.choices[0].message.content.strip()
+
+    db_update(job_id, analysis=analysis_text)
+
+    return {"analysis": analysis_text}
 
 
 @app.delete("/api/jobs/{job_id}", status_code=204)
