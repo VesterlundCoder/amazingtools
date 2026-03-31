@@ -251,6 +251,11 @@ def get_job(job_id: str):
     return result
 
 
+@app.get("/api/health")
+def health():
+    return {"status": "ok"}
+
+
 @app.delete("/api/jobs/{job_id}", status_code=204)
 def delete_job(job_id: str):
     conn = get_db()
