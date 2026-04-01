@@ -386,7 +386,7 @@ async def _fetch_page_sections(url: str) -> list[dict]:
     try:
         async with httpx.AsyncClient(
             timeout=30, follow_redirects=True,
-            headers={"User-Agent": "AmazingTools-SEO/1.0 (+https://davidvesterlund.com)"}
+            headers={"User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"}
         ) as c:
             r = await c.get(url)
             r.raise_for_status()
@@ -534,7 +534,9 @@ async def ahrefs_analysis(req: AhrefsRequest):
         {"target": domain},
         api_key,
     )
-    dr = float((dr_resp.get("domain") or {}).get("domain_rating", 0))
+    # Ahrefs v3 may return {"domain": {"domain_rating": N}} or {"domain_rating": N}
+    _dr_obj = dr_resp.get("domain") or dr_resp
+    dr = float(_dr_obj.get("domain_rating") or _dr_obj.get("dr") or 0)
     domain_bonus = _ahrefs_bonus(dr)
 
     # 2) Referring domains count — best-effort, skip if unavailable

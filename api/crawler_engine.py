@@ -45,9 +45,12 @@ from bs4 import BeautifulSoup
 logger = logging.getLogger(__name__)
 
 HEADERS = {
-    "User-Agent": "AmazingTools-SEO-Crawler/1.0 (+https://davidvesterlund.com/amazingtools)",
-    "Accept": "text/html,application/xhtml+xml",
-    "Accept-Language": "en-US,en;q=0.9",
+    "User-Agent": (
+        "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9,sv;q=0.8",
+    "Accept-Encoding": "gzip, deflate, br",
 }
 REQUEST_TIMEOUT = 15
 CRAWL_DELAY    = 0.3   # seconds between requests
@@ -129,7 +132,11 @@ def _fetch(url: str, session: requests.Session, check_externals: bool = False) -
         resp = session.get(url, timeout=REQUEST_TIMEOUT, allow_redirects=True)
         return resp.status_code, resp.headers.get("Content-Type", ""), resp.content
     except requests.exceptions.SSLError:
-        return 0, None, None
+        try:  # retry without SSL verification (self-signed / expired cert)
+            resp = session.get(url, timeout=REQUEST_TIMEOUT, allow_redirects=True, verify=False)
+            return resp.status_code, resp.headers.get("Content-Type", ""), resp.content
+        except Exception:
+            return 0, None, None
     except requests.exceptions.ConnectionError:
         return 0, None, None
     except requests.exceptions.Timeout:
@@ -296,14 +303,46 @@ def _fetch_sitemap_urls(base_url: str, base_netloc: str,
                 root = _get_xml(sm_url)
                 sitemap_urls.extend(_parse_sitemap(root))
 
-    # 2) Try common sitemap locations if none found yet
+    # 2) Also scan homepage HTML for <link rel="sitemap"> tags
     if not sitemap_urls:
-        for path in ["/sitemap.xml", "/sitemap_index.xml", "/sitemap/sitemap.xml",
-                     "/sitemap/", "/sitemaps/sitemap.xml"]:
+        try:
+            r = session.get(base_url, timeout=10, allow_redirects=True)
+            if r.status_code == 200 and "html" in r.headers.get("Content-Type", ""):
+                import xml.etree.ElementTree as _ET2
+                from bs4 import BeautifulSoup as _BS
+                soup_home = _BS(r.content, "html.parser")
+                for lnk in soup_home.find_all("link", rel=True):
+                    rels = lnk.get("rel", [])
+                    if isinstance(rels, str):
+                        rels = [rels]
+                    if any("sitemap" in rv.lower() for rv in rels):
+                        sm_href = lnk.get("href", "").strip()
+                        if sm_href:
+                            sm_href = sm_href if sm_href.startswith("http") else base_url + sm_href
+                            child = _get_xml(sm_href)
+                            sitemap_urls.extend(_parse_sitemap(child))
+        except Exception:
+            pass
+
+    # 3) Try common sitemap locations if still none found
+    if not sitemap_urls:
+        for path in [
+            "/sitemap.xml", "/sitemap_index.xml",
+            "/wp-sitemap.xml",               # WordPress 5.5+
+            "/sitemap/sitemap.xml",
+            "/sitemap/",
+            "/sitemaps/sitemap.xml",
+            "/page-sitemap.xml",             # Yoast
+            "/post-sitemap.xml",             # Yoast
+            "/product-sitemap.xml",          # WooCommerce/Yoast
+            "/category-sitemap.xml",
+            "/news-sitemap.xml",
+        ]:
             root = _get_xml(base_url + path)
             if root is not None:
                 sitemap_urls.extend(_parse_sitemap(root))
-                break  # stop at first successful parse
+                if sitemap_urls:
+                    break  # stop at first successful parse
 
     # Deduplicate and filter to internal only
     seen: set = set()
@@ -566,6 +605,7 @@ async def _run_orchestrator(start_url: str, max_pages: int,
         max_concurrency=5,
         rate_limit_rps=2.0,
         render_mode=render_mode,
+        user_agent=HEADERS["User-Agent"],
         respect_robots=respect_robots,
         on_page_complete=on_page,
     )
