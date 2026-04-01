@@ -741,6 +741,51 @@ def analyze_job(job_id: str):
     return {"analysis": analysis_text}
 
 
+class ChatMessage(BaseModel):
+    role:    str
+    content: str
+
+class ChatRequest(BaseModel):
+    message: str
+    history: list[ChatMessage] = []
+    context: str = ""
+
+
+@app.post("/api/chat")
+async def mevo_chat(req: ChatRequest):
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        raise HTTPException(500, detail="OPENAI_API_KEY not configured.")
+
+    system_prompt = (
+        "Du är MEVO, en AI-assistent specialiserad inom SEO och digital marknadsföring. "
+        "Du arbetar på Amazing Tools-plattformen och hjälper användare att analysera och presentera "
+        "SEO-data för sina kunder. Svara alltid på svenska om inte användaren skriver på ett annat "
+        "språk. Du är professionell, vänlig och konkret. Du kan hjälpa till med sökordsanalys, "
+        "länkstrategi, on-page SEO, intern länkning, presentationsmaterial och strategiska råd. "
+        "Håll svaren kortfattade och handlingsinriktade."
+    )
+
+    messages: list[dict] = [{"role": "system", "content": system_prompt}]
+    if req.context:
+        messages.append({"role": "system", "content": f"Kontext om aktuell data:\n{req.context}"})
+    for m in req.history[-12:]:
+        messages.append({"role": m.role, "content": m.content})
+    messages.append({"role": "user", "content": req.message})
+
+    try:
+        client = OpenAI(api_key=api_key)
+        resp = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages,
+            max_tokens=600,
+            temperature=0.7,
+        )
+        return {"reply": resp.choices[0].message.content.strip()}
+    except Exception as e:
+        raise HTTPException(500, detail=f"Chat error: {e}")
+
+
 @app.delete("/api/jobs/{job_id}", status_code=204)
 def delete_job(job_id: str):
     conn = get_db()

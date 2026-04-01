@@ -1076,6 +1076,28 @@
 
       buildUrlTabs();
 
+      /* Build a concise context string for the MEVO chat widget */
+      try {
+        const clientDomain = job.client_url;
+        const clientData   = (job.results || {})[clientDomain] || {};
+        const s = clientData.summary || {};
+        const pages = clientData.pages || [];
+        const topKwPages = pages.filter(p => p.ahrefs_keywords && p.ahrefs_keywords.length);
+        const kwLines = topKwPages.slice(0, 5).map(p => {
+          const k = p.ahrefs_keywords[0];
+          return `  - ${p.url.replace(/^https?:\/\/[^/]+/,'') || '/'}: "${k.keyword}" pos #${k.position} vol ${(k.volume||0).toLocaleString()}`;
+        }).join('\n');
+        const ctx = [
+          `Kund: ${clientDomain}`,
+          `Crawlade sidor: ${s.total_pages || 0} (200: ${s.pages_200||0}, 3xx: ${s.pages_3xx||0}, 4xx: ${s.pages_4xx||0})`,
+          `Saknar title: ${s.missing_titles||0} | Saknar H1: ${s.missing_h1||0} | Saknar meta: ${s.missing_meta_desc||0}`,
+          `Brutna länkar: ${s.broken_links||0} | Bilder utan alt: ${s.images_without_alt||0}`,
+          `Duplicerade titlar: ${s.duplicate_titles||0} | Noindex: ${s.noindex_count||0}`,
+          kwLines ? `\nTop ranking keywords (Ahrefs):\n${kwLines}` : '',
+        ].filter(Boolean).join('\n');
+        document.dispatchEvent(new CustomEvent('mevo-context-ready', { detail: ctx }));
+      } catch(_) {}
+
     } catch(e) {
       document.getElementById('state-loading').textContent = `Could not load job: ${e.message}`;
     }
@@ -1091,5 +1113,12 @@
   }
 
 </script>
+<script>
+  /* Inject crawl context into MEVO widget when job data is loaded */
+  document.addEventListener('mevo-context-ready', function(e) {
+    window.MEVO_CONTEXT = e.detail || '';
+  });
+</script>
+<script src="mevo-chat.js"></script>
 </body>
 </html>
