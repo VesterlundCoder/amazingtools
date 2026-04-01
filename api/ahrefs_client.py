@@ -10,9 +10,14 @@ The AHREFS_API_KEY environment variable must be set on the server.
 """
 
 import logging
+from datetime import date
 import httpx
 
 logger   = logging.getLogger(__name__)
+
+
+def _today() -> str:
+    return date.today().isoformat()
 _BASE    = "https://api.ahrefs.com/v3"
 _TIMEOUT = 20
 
@@ -34,6 +39,7 @@ def fetch_ref_domains(url: str, api_key: str) -> dict:
                 "select":   "domain_rating_source,referring_domain",
                 "limit":    "1000",
                 "order_by": "domain_rating_source:desc",
+                "date":     _today(),
             },
             headers={"Authorization": f"Bearer {api_key}"},
             timeout=_TIMEOUT,
@@ -73,6 +79,7 @@ def fetch_organic_keywords(url: str, api_key: str, limit: int = 10) -> list:
                 "select":   "keyword,pos,volume,traffic",
                 "limit":    str(limit),
                 "order_by": "traffic:desc",
+                "date":     _today(),
             },
             headers={"Authorization": f"Bearer {api_key}"},
             timeout=_TIMEOUT,

@@ -18,7 +18,7 @@ import threading
 import time
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Optional
 
 import httpx
@@ -528,10 +528,12 @@ async def ahrefs_analysis(req: AhrefsRequest):
     domain = parsed.netloc or parsed.path.strip("/")
     target = req.target if req.mode == "url" else domain
 
+    _today = date.today().isoformat()
+
     # 1) Domain Rating — primary signal, raise if it fails
     dr_resp = await _ahrefs_get(
         "site-explorer/domain-rating",
-        {"target": domain},
+        {"target": domain, "date": _today},
         api_key,
     )
     # Ahrefs v3 may return {"domain": {"domain_rating": N}} or {"domain_rating": N}
@@ -545,7 +547,7 @@ async def ahrefs_analysis(req: AhrefsRequest):
         ref_resp = await _ahrefs_get(
             "site-explorer/refdomains",
             {"target": domain, "mode": "domain", "limit": 1,
-             "select": "referring_domain,domain_rating_source"},
+             "select": "referring_domain,domain_rating_source", "date": _today},
             api_key,
         )
         refdomains_count = ref_resp.get("total", 0) or len(ref_resp.get("refdomains") or [])
@@ -562,6 +564,7 @@ async def ahrefs_analysis(req: AhrefsRequest):
                 "limit":   50,
                 "mode":    req.mode,
                 "select":  "url_from,domain_from,domain_rating_source,anchor,nofollow,url_to",
+                "date":    _today,
             },
             api_key,
         )
@@ -598,6 +601,34 @@ async def ahrefs_analysis(req: AhrefsRequest):
         "organic_traffic":     0,
         "backlinks":           enriched,
     }
+
+
+# ── Ahrefs per-page keywords (on-demand from results page) ───────────────────
+
+class AhrefsKeywordsRequest(BaseModel):
+    urls:  list[str]
+    limit: int = 10
+
+
+@app.post("/api/analyze/ahrefs-keywords")
+async def ahrefs_keywords_analysis(req: AhrefsKeywordsRequest):
+    api_key = os.environ.get("AHREFS_API_KEY")
+    if not api_key:
+        raise HTTPException(500, detail="AHREFS_API_KEY not configured.")
+    if not req.urls:
+        raise HTTPException(400, detail="urls list is empty.")
+
+    import asyncio
+    from ahrefs_client import fetch_organic_keywords as _fetch_kw
+
+    async def _fetch_one(url: str) -> dict:
+        kws = await asyncio.to_thread(_fetch_kw, url, api_key, req.limit)
+        return {"url": url, "keywords": kws}
+
+    tasks = [_fetch_one(u) for u in req.urls[:30]]  # cap at 30 pages
+    pages = await asyncio.gather(*tasks, return_exceptions=False)
+    pages = [p for p in pages if p["keywords"]]     # drop empty
+    return {"pages": pages}
 
 
 # ── PageSpeed Insights ────────────────────────────────────────────────────────

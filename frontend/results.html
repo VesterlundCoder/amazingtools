@@ -138,7 +138,7 @@
           <button class="tab-btn" onclick="showSection('issues',this)">Issues <span id="issue-count-badge"></span></button>
           <button class="tab-btn" onclick="showSection('pages',this)">All Pages</button>
           <button class="tab-btn" id="ipr-tab-btn" onclick="showSection('ipr',this)" style="display:none">Link Graph (IPR)</button>
-          <button class="tab-btn" id="keywords-tab-btn" onclick="showSection('keywords',this)" style="display:none">Keywords</button>
+          <button class="tab-btn" id="keywords-tab-btn" onclick="showSection('keywords',this)">Keywords</button>
           <button class="tab-btn" id="ux-tab-btn" onclick="showSection('ux',this)" style="display:none">UX Analysis</button>
           <button class="tab-btn" onclick="showSection('cwv',this)">Core Web Vitals</button>
           <button class="tab-btn" onclick="showSection('authority',this)">Authority</button>
@@ -1321,16 +1321,62 @@
     document.getElementById('ux-content').innerHTML = html;
   }
 
+  /* ── Ahrefs on-demand keyword fetch ── */
+  async function fetchAhrefsKeywords() {
+    const btn = document.getElementById('kw-fetch-btn');
+    const err = document.getElementById('kw-fetch-error');
+    if (!allPagesData.length) return;
+    btn.disabled = true;
+    btn.textContent = 'Fetching…';
+    err.style.display = 'none';
+    const urls = allPagesData
+      .filter(p => p.status_code === 200)
+      .map(p => p.url)
+      .slice(0, 30);
+    try {
+      const r = await fetch(`${API_BASE}/api/analyze/ahrefs-keywords`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ urls, limit: 10 }),
+      });
+      if (!r.ok) {
+        const e = await r.json().catch(() => ({}));
+        throw new Error(e.detail || `HTTP ${r.status}`);
+      }
+      const data = await r.json();
+      const kwMap = Object.fromEntries(data.pages.map(p => [p.url, p.keywords]));
+      allPagesData = allPagesData.map(p =>
+        kwMap[p.url] ? { ...p, ahrefs_keywords: kwMap[p.url] } : p
+      );
+      renderKeywordsTab(allPagesData);
+    } catch(e) {
+      err.style.display = 'block';
+      err.textContent = `Ahrefs keyword fetch failed: ${e.message}`;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Fetch from Ahrefs';
+    }
+  }
+
   /* ── Keywords tab (Ahrefs per-page organic keywords) ── */
   function renderKeywordsTab(pages) {
     const pagesWithKw = pages.filter(p => p.ahrefs_keywords && p.ahrefs_keywords.length > 0);
     if (!pagesWithKw.length) {
-      document.getElementById('keywords-tab-btn').style.display = 'none';
-      document.getElementById('keywords-content').innerHTML = '';
+      document.getElementById('keywords-content').innerHTML = `
+        <div style="text-align:center;padding:48px 24px">
+          <div style="font-size:32px;margin-bottom:12px">🔑</div>
+          <p style="font-size:14px;font-weight:600;color:#101010;margin:0 0 6px">No keyword data yet</p>
+          <p style="font-size:12px;color:#888;max-width:360px;margin:0 auto 20px;line-height:1.6">
+            Either re-crawl with <strong>"Use Ahrefs"</strong> enabled, or click below to fetch rankings now for the top 30 pages.
+          </p>
+          <div id="kw-fetch-error" style="display:none;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 14px;color:#dc2626;font-size:12px;max-width:380px;margin:0 auto 14px;text-align:left"></div>
+          <button id="kw-fetch-btn" onclick="fetchAhrefsKeywords()"
+            style="background:#101010;color:#fff;border:none;border-radius:8px;padding:9px 22px;font-size:13px;font-weight:600;cursor:pointer">
+            Fetch from Ahrefs
+          </button>
+        </div>`;
       return;
     }
-
-    document.getElementById('keywords-tab-btn').style.display = '';
 
     const totalKw  = pagesWithKw.reduce((s, p) => s + p.ahrefs_keywords.length, 0);
     const totalTrf = pagesWithKw.reduce((s, p) =>
