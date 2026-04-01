@@ -228,7 +228,9 @@
 
     history.push({ role: 'user', content: text });
 
-    const base   = (typeof API_BASE !== 'undefined') ? API_BASE : '';
+    const base   = (typeof API_BASE !== 'undefined' && API_BASE)
+                    ? API_BASE
+                    : 'https://web-production-c14f30.up.railway.app';
     const ctx    = (typeof window.MEVO_CONTEXT === 'string') ? window.MEVO_CONTEXT : '';
 
     try {
