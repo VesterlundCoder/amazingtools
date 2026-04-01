@@ -281,7 +281,11 @@ def run_crawl(job_id: str, client_url: str, competitor_urls: list[str],
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "service": "seo-crawler-api"}
+    return {
+        "status":  "ok",
+        "service": "seo-crawler-api",
+        "db":      "sqlite" if _IS_SQLITE else "postgresql",
+    }
 
 
 @app.post("/api/crawl")
@@ -367,10 +371,6 @@ def get_job(job_id: str):
         "results":          json.loads(row["results"]) if row["results"] else None,
     }
 
-
-@app.get("/api/health")
-def health():
-    return {"status": "ok"}
 
 
 # ── Semantic analysis helpers ───────────────────────────────────────────────

@@ -1539,7 +1539,22 @@
       } catch(_) {}
 
     } catch(e) {
-      document.getElementById('state-loading').textContent = `Could not load job: ${e.message}`;
+      const is404 = e.message.includes('404');
+      document.getElementById('state-loading').innerHTML = is404
+        ? `<div style="text-align:center;padding:60px 24px">
+             <div style="font-size:36px;margin-bottom:12px">🗂️</div>
+             <p style="color:#b45309;font-size:15px;font-weight:700;margin:0 0 8px">Crawl job not found</p>
+             <p style="color:#888;font-size:13px;max-width:360px;margin:0 auto 20px;line-height:1.6">
+               This job no longer exists in the database — it was likely lost when the server restarted.<br>
+               <strong>Fix:</strong> make sure a PostgreSQL add-on is attached on Railway so jobs persist across deploys.
+             </p>
+             <a href="seo-crawler.html" style="display:inline-block;background:#101010;color:#fff;padding:9px 22px;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none">← Start New Crawl</a>
+           </div>`
+        : `<div style="text-align:center;padding:40px">
+             <p style="color:#dc2626;font-size:14px;font-weight:600">Could not load job</p>
+             <p style="color:#888;font-size:13px">${e.message}</p>
+             <a href="seo-crawler.html" style="display:inline-block;margin-top:12px;color:#0bb4aa;font-size:13px">← Back to Crawler</a>
+           </div>`;
     }
   }
 

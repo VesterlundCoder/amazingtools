@@ -332,15 +332,19 @@
     const jobs = lsLoad().map(j => j.id === id ? { ...j, ...patch } : j);
     localStorage.setItem(LS_KEY, JSON.stringify(jobs));
   }
-  function lsMerge(apiJobs) {
-    const api = Object.fromEntries(apiJobs.map(j => [j.id, j]));
-    const cached = lsLoad();
-    const merged = {};
-    cached.forEach(j => { merged[j.id] = { ...j, _cached: true }; });
-    apiJobs.forEach(j => { merged[j.id] = j; });
-    return Object.values(merged)
-      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-      .slice(0, 50);
+  function lsMerge(apiJobs, apiOnline) {
+    if (apiOnline) {
+      /* API is reachable — trust it as the single source of truth.
+         Overwrite the cache so stale 404 jobs don't linger. */
+      localStorage.setItem(LS_KEY, JSON.stringify(apiJobs.slice(0, 50)));
+      return apiJobs
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        .slice(0, 50);
+    }
+    /* API offline — fall back to last known cache, mark all as cached */
+    return lsLoad()
+      .map(j => ({ ...j, _cached: true }))
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   }
 
   /* Polling */
@@ -382,7 +386,7 @@
       if (r.ok) { apiJobs = await r.json(); apiOnline = true; }
     } catch { /* offline */ }
 
-    const jobs = lsMerge(apiJobs);
+    const jobs = lsMerge(apiJobs, apiOnline);
 
     document.getElementById('jobs-loading').style.display = 'none';
     if (!jobs.length) {
