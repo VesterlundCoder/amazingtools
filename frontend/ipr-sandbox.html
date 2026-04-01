@@ -184,7 +184,7 @@
     top.forEach(p=>{sbOrigIPR[p.url]=p.ipr||0;});
     sbIPR=sbComputePR(sbNodes,sbLinks);
 
-    const domain = top[0] ? new URL(top[0].id).hostname : '';
+    const domain = top[0] ? new URL(top[0].url).hostname : '';
     document.getElementById('sb-domain-label').textContent = domain + ` — ${top.length} pages loaded`;
     document.getElementById('open-results-link').href = `results.html?job=${jobId}`;
     document.getElementById('sandbox-wrap').style.display='';
