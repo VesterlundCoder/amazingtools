@@ -39,6 +39,19 @@
     .url-tab{padding:7px 14px;border:1px solid #e2e8f0;border-radius:8px;font-size:12px;font-weight:500;color:#555;cursor:pointer;transition:all .15s;background:#fff;white-space:nowrap}
     .url-tab.active{background:#0bb4aa;color:#fff;border-color:#0bb4aa}
     .url-tab:hover:not(.active){border-color:#0bb4aa;color:#0bb4aa}
+    /* Alert modal */
+    #alert-modal{display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.45)}
+    #alert-modal-panel{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;border-radius:16px;width:min(640px,94vw);max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.18)}
+    /* Print */
+    @media print{
+      nav,footer,#alert-banner,#alert-modal,#export-btn,#pdf-btn,#mevo-btn,.tab-btn,.url-tab,
+      [onclick="exportCSV()"],[onclick="exportPDF()"]{display:none!important}
+      #results-content,#domain-view,#section-overview,#section-onpage,#section-links,
+      #section-issues,#section-pages{display:block!important}
+      .card{box-shadow:none;border:1px solid #e2e8f0}
+      body{background:#fff}
+      a{color:#0bb4aa;text-decoration:none}
+    }
   </style>
 </head>
 <body class="min-h-screen">
@@ -84,8 +97,9 @@
           <h1 style="font-size:1.5rem;font-weight:800;color:#101010;letter-spacing:-0.5px;margin:6px 0 4px" id="results-title">Crawl Results</h1>
           <p style="font-size:13px;color:#888" id="results-meta"></p>
         </div>
-        <div style="display:flex;gap:10px;align-items:center">
-          <a href="#" id="export-btn" onclick="exportCSV()" style="background:#f1f5f9;border:1px solid #e2e8f0;color:#555;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:500;text-decoration:none">⬇ Export CSV</a>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button id="export-btn" onclick="exportCSV()" style="background:#f1f5f9;border:1px solid #e2e8f0;color:#555;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer">⬇ CSV</button>
+          <button id="pdf-btn" onclick="exportPDF()" style="background:#f1f5f9;border:1px solid #e2e8f0;color:#555;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer">🖨 PDF</button>
           <a id="mevo-btn" href="#" style="background:#101010;color:#0bb4aa;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:700;text-decoration:none;letter-spacing:.03em">MEVO.AI →</a>
         </div>
       </div>
@@ -102,6 +116,15 @@
 
     <!-- Per-domain view -->
     <div id="domain-view">
+
+      <!-- Critical issues alert banner -->
+      <div id="alert-banner" onclick="openAlertModal()" style="display:none;background:#fff5f5;border:1px solid #fecaca;border-radius:10px;padding:14px 20px;margin-bottom:20px;cursor:pointer;align-items:center;gap:14px">
+        <span style="font-size:20px;flex-shrink:0">⚠️</span>
+        <div style="flex:1">
+          <p id="alert-banner-title" style="font-size:13px;font-weight:700;color:#dc2626;margin:0 0 2px"></p>
+          <p style="font-size:12px;color:#b45309;margin:0">Click to view all issues and fixes →</p>
+        </div>
+      </div>
 
       <!-- Scorecard row -->
       <div id="scorecard" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:14px;margin-bottom:28px"></div>
@@ -290,6 +313,20 @@
       </div>
 
     </div>
+  </div>
+</div>
+
+<!-- Alert Issues Modal -->
+<div id="alert-modal" onclick="closeAlertModal()">
+  <div id="alert-modal-panel" onclick="event.stopPropagation()">
+    <div style="padding:24px 28px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:#fff;border-bottom:1px solid #f1f5f9;z-index:1">
+      <div>
+        <p style="font-size:15px;font-weight:800;color:#101010;margin:0">⚠️ Critical Issues — Fix These Now</p>
+        <p style="font-size:12px;color:#888;margin:4px 0 0">These issues have the highest impact on crawlability and rankings</p>
+      </div>
+      <button onclick="closeAlertModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#aaa;padding:2px 6px;line-height:1">✕</button>
+    </div>
+    <div id="alert-modal-content" style="padding:24px 28px"></div>
   </div>
 </div>
 
@@ -583,6 +620,118 @@
   function tick(val) { return val ? `<span style="color:#059669">✓</span>` : `<span style="color:#dc2626">✗</span>`; }
   function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
+  /* ── Critical Issues Alert ── */
+  function buildCriticalAlerts(data) {
+    const s     = data.summary || {};
+    const pages = data.pages   || [];
+    const alerts = [];
+
+    /* HTML issues */
+    if ((s.pages_4xx||0) > 0)
+      alerts.push({lvl:'critical', icon:'🔴', title:`${s.pages_4xx} page(s) return 404 / 4xx errors`,
+        desc:'404s waste crawl budget and break user journeys. Set up 301 redirects for removed content.'});
+    if ((s.noindex_count||0) > 0)
+      alerts.push({lvl:'critical', icon:'🔴', title:`${s.noindex_count} page(s) have a noindex directive`,
+        desc:"These pages are excluded from Google's index. Confirm each exclusion is intentional — or remove the tag."});
+    if ((s.missing_h1||0) > 0)
+      alerts.push({lvl:'warning', icon:'🟡', title:`${s.missing_h1} page(s) are missing an H1 tag`,
+        desc:"H1 is Google's primary on-page relevance signal. Every indexable page must have exactly one H1 containing the target keyword."});
+    const multiH1 = pages.filter(p => (p.h1_count||0) > 1).length;
+    if (multiH1 > 0)
+      alerts.push({lvl:'warning', icon:'🟡', title:`${multiH1} page(s) have multiple H1 tags`,
+        desc:'Multiple H1 tags dilute keyword signals. Use H2–H6 for all subsequent headings.'});
+
+    /* JS / architecture issues (Playwright data — only present if Playwright ran) */
+    const shadowPages = pages.filter(p => ((p.pw_architecture||{}).shadow_dom_links_found||0) > 0).length;
+    if (shadowPages > 0)
+      alerts.push({lvl:'warning', icon:'⚠️', title:`${shadowPages} page(s) have links only discoverable via JavaScript`,
+        desc:'JS-only links may not be followed by all crawlers. Prefer server-rendered HTML anchor tags.'});
+
+    const robotsTxt = data.robots_txt || '';
+    if (robotsTxt && /disallow.*\.js/i.test(robotsTxt))
+      alerts.push({lvl:'critical', icon:'🔴', title:'robots.txt may be blocking JavaScript files',
+        desc:"If Googlebot can't load JS, it sees a broken or empty version of your site — destroying rendered SEO tags and internal links."});
+
+    const lazyPages = pages.filter(p => ((p.pw_ux||{}).images_lazy_missing||0) > 0).length;
+    if (lazyPages > 0)
+      alerts.push({lvl:'warning', icon:'⚠️', title:`${lazyPages} page(s) have lazy-loaded images above the fold`,
+        desc:'Above-fold images with loading="lazy" delay LCP — the most heavily weighted Core Web Vital. Remove lazy loading from hero images.'});
+
+    const banner = document.getElementById('alert-banner');
+    if (!alerts.length) { banner.style.display = 'none'; return; }
+
+    const critCount = alerts.filter(a => a.lvl === 'critical').length;
+    const warnCount = alerts.length - critCount;
+    const hasCrit   = critCount > 0;
+    banner.style.display      = 'flex';
+    banner.style.background   = hasCrit ? '#fff5f5'  : '#fef9f0';
+    banner.style.borderColor  = hasCrit ? '#fecaca'  : '#f59e0b';
+    const titleEl = document.getElementById('alert-banner-title');
+    titleEl.style.color = hasCrit ? '#dc2626' : '#92400e';
+    titleEl.textContent = `${alerts.length} issue${alerts.length>1?'s':''} need attention: ` +
+      [critCount && `${critCount} critical`, warnCount && `${warnCount} warning${warnCount>1?'s':''}`].filter(Boolean).join(' · ');
+
+    const sevColor = { critical:'#dc2626', warning:'#b45309' };
+    const sevBg    = { critical:'#fff5f5', warning:'#fffbf0' };
+    document.getElementById('alert-modal-content').innerHTML = alerts.map(a => `
+      <div style="padding:14px 16px;border-radius:9px;border:1px solid ${sevColor[a.lvl]}30;background:${sevBg[a.lvl]};margin-bottom:12px">
+        <div style="display:flex;align-items:flex-start;gap:10px">
+          <span style="font-size:16px;flex-shrink:0;margin-top:1px">${a.icon}</span>
+          <div>
+            <p style="font-size:13px;font-weight:700;color:#101010;margin:0 0 5px">${esc(a.title)}</p>
+            <p style="font-size:12px;color:#555;margin:0;line-height:1.6">💡 ${esc(a.desc)}</p>
+          </div>
+        </div>
+      </div>`).join('');
+  }
+
+  function openAlertModal()  { document.getElementById('alert-modal').style.display = ''; }
+  function closeAlertModal() { document.getElementById('alert-modal').style.display = 'none'; }
+
+  /* ── CSV Export ── */
+  function exportCSV() {
+    if (!allPagesData.length) { alert('No page data loaded.'); return; }
+    const headers = [
+      'URL','Status','Title','H1','H1 Count','Meta Description','Canonical','Noindex',
+      'Internal Links','Ext. Links','Images/No Alt','Word Count','Crawl Depth',
+      'IPR Score','IPR Inbound','IPR Outbound','Ref Domains DR≥10','Top Keyword','KW Position','KW Volume'
+    ];
+    const q = v => `"${String(v??'').replace(/"/g,'""')}"`;
+    const rows = allPagesData.map(p => {
+      const kw = (p.ahrefs_keywords||[])[0] || {};
+      return [
+        p.url, p.status_code??'', p.title??'', p.h1??'', p.h1_count??'',
+        p.meta_description??'', p.canonical??'', p.noindex?'yes':'no',
+        p.internal_links_count??'', p.external_links_count??'', p.images_without_alt??'',
+        p.word_count??'', p.crawl_depth??'',
+        p.ipr!=null ? p.ipr.toFixed(4) : '',
+        p.ipr_inbound??'', p.ipr_outbound??'', p.ahrefs_ref_domains_dr10??'',
+        kw.keyword??'', kw.position??'', kw.volume??'',
+      ].map(q);
+    });
+    const csv = [headers.map(q), ...rows].map(r => r.join(',')).join('\n');
+    const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    const dom = (currentDomain||'export').replace(/https?:\/\//,'').replace(/\//g,'-').replace(/\.$/,'');
+    a.download = `seo-report-${dom}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  /* ── PDF / Print Export ── */
+  function exportPDF() {
+    /* Show all sections before printing, then restore */
+    const sections = ['overview','onpage','links','issues','pages'];
+    const hidden = sections.filter(s => {
+      const el = document.getElementById(`section-${s}`);
+      return el && el.style.display === 'none';
+    });
+    hidden.forEach(s => { document.getElementById(`section-${s}`).style.display = ''; });
+    window.print();
+    hidden.forEach(s => { document.getElementById(`section-${s}`).style.display = 'none'; });
+  }
+
   /* ── Build scorecard ── */
   function buildScorecard(summary) {
     const items = [
@@ -825,6 +974,7 @@
     const data = jobData.results[domain];
     if (!data) return;
 
+    buildCriticalAlerts(data);
     document.getElementById('scorecard').innerHTML = buildScorecard(data.summary);
     document.getElementById('overview-content').innerHTML = buildOverview(data);
     document.getElementById('onpage-content').innerHTML = buildOnPage(data);

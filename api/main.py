@@ -14,7 +14,6 @@ Jobs run in a background thread pool; results stored in SQLite.
 import json
 import logging
 import os
-import sqlite3
 import threading
 import time
 import uuid
@@ -39,52 +38,61 @@ logger = logging.getLogger(__name__)
 DB_PATH = os.environ.get("DB_PATH", "jobs.db")
 
 
-# ── Database ─────────────────────────────────────────────────────────────────
+# ── Database (SQLAlchemy — SQLite locally, PostgreSQL on Railway) ─────────────
 
-def get_db():
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    return conn
+from sqlalchemy import create_engine, text
+from sqlalchemy.pool import StaticPool
 
+_DB_URL = os.environ.get("DATABASE_URL", f"sqlite:///./{DB_PATH}")
+if _DB_URL.startswith("postgres://"):          # Railway uses legacy scheme
+    _DB_URL = _DB_URL.replace("postgres://", "postgresql://", 1)
+_IS_SQLITE = _DB_URL.startswith("sqlite")
 
-def init_db():
-    conn = get_db()
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS jobs (
-            id              TEXT PRIMARY KEY,
-            client_url      TEXT NOT NULL,
-            competitor_urls TEXT NOT NULL,   -- JSON array
-            status          TEXT NOT NULL DEFAULT 'pending',
-            created_at      TEXT NOT NULL,
-            started_at      TEXT,
-            completed_at    TEXT,
-            pages_crawled   INTEGER DEFAULT 0,
-            error_message   TEXT,
-            results         TEXT,            -- JSON
-            analysis        TEXT             -- GPT analysis text
-        )
-    """)
-    # Migrate existing tables that lack the analysis column
-    try:
-        conn.execute("ALTER TABLE jobs ADD COLUMN analysis TEXT")
-        conn.commit()
-    except Exception:
-        pass  # column already exists
-    conn.commit()
-    conn.close()
-
+if _IS_SQLITE:
+    engine = create_engine(
+        _DB_URL,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+else:
+    engine = create_engine(_DB_URL, pool_pre_ping=True, pool_size=5, max_overflow=10)
 
 db_lock = threading.Lock()
 
 
+def init_db():
+    with engine.begin() as conn:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS jobs (
+                id              TEXT PRIMARY KEY,
+                client_url      TEXT NOT NULL,
+                competitor_urls TEXT NOT NULL,
+                status          TEXT NOT NULL DEFAULT 'pending',
+                created_at      TEXT NOT NULL,
+                started_at      TEXT,
+                completed_at    TEXT,
+                pages_crawled   INTEGER DEFAULT 0,
+                error_message   TEXT,
+                results         TEXT,
+                analysis        TEXT
+            )
+        """))
+    try:
+        with engine.begin() as conn:
+            if _IS_SQLITE:
+                conn.execute(text("ALTER TABLE jobs ADD COLUMN analysis TEXT"))
+            else:
+                conn.execute(text("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS analysis TEXT"))
+    except Exception:
+        pass
+
+
 def db_update(job_id: str, **kwargs):
     with db_lock:
-        conn = get_db()
-        sets = ", ".join(f"{k} = ?" for k in kwargs)
-        vals = list(kwargs.values()) + [job_id]
-        conn.execute(f"UPDATE jobs SET {sets} WHERE id = ?", vals)
-        conn.commit()
-        conn.close()
+        sets   = ", ".join(f"{k} = :{k}" for k in kwargs)
+        params = {**kwargs, "_jid": job_id}
+        with engine.begin() as conn:
+            conn.execute(text(f"UPDATE jobs SET {sets} WHERE id = :_jid"), params)
 
 
 # ── App lifespan ──────────────────────────────────────────────────────────────
@@ -292,13 +300,13 @@ def start_crawl(req: CrawlRequest, background_tasks: BackgroundTasks):
     now    = datetime.now(timezone.utc).isoformat()
 
     with db_lock:
-        conn = get_db()
-        conn.execute(
-            "INSERT INTO jobs (id, client_url, competitor_urls, status, created_at) VALUES (?,?,?,?,?)",
-            (job_id, req.client_url, json.dumps(req.competitor_urls), "pending", now)
-        )
-        conn.commit()
-        conn.close()
+        with engine.begin() as conn:
+            conn.execute(
+                text("INSERT INTO jobs (id, client_url, competitor_urls, status, created_at) "
+                     "VALUES (:id, :cu, :comps, :status, :ts)"),
+                {"id": job_id, "cu": req.client_url, "comps": json.dumps(req.competitor_urls),
+                 "status": "pending", "ts": now},
+            )
 
     background_tasks.add_task(
         run_crawl, job_id,
@@ -315,13 +323,12 @@ def start_crawl(req: CrawlRequest, background_tasks: BackgroundTasks):
 
 @app.get("/api/jobs")
 def list_jobs(limit: int = 20, offset: int = 0):
-    conn = get_db()
-    rows = conn.execute(
-        "SELECT id, client_url, competitor_urls, status, created_at, completed_at, pages_crawled "
-        "FROM jobs ORDER BY created_at DESC LIMIT ? OFFSET ?",
-        (limit, offset)
-    ).fetchall()
-    conn.close()
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text("SELECT id, client_url, competitor_urls, status, created_at, completed_at, pages_crawled "
+                 "FROM jobs ORDER BY created_at DESC LIMIT :lim OFFSET :off"),
+            {"lim": limit, "off": offset},
+        ).mappings().fetchall()
 
     return [
         {
@@ -339,14 +346,15 @@ def list_jobs(limit: int = 20, offset: int = 0):
 
 @app.get("/api/jobs/{job_id}")
 def get_job(job_id: str):
-    conn = get_db()
-    row = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
-    conn.close()
+    with engine.connect() as conn:
+        row = conn.execute(
+            text("SELECT * FROM jobs WHERE id = :id"), {"id": job_id}
+        ).mappings().fetchone()
 
     if not row:
         raise HTTPException(404, detail="Job not found.")
 
-    result = {
+    return {
         "id":               row["id"],
         "client_url":       row["client_url"],
         "competitor_urls":  json.loads(row["competitor_urls"] or "[]"),
@@ -358,7 +366,6 @@ def get_job(job_id: str):
         "error_message":    row["error_message"],
         "results":          json.loads(row["results"]) if row["results"] else None,
     }
-    return result
 
 
 @app.get("/api/health")
@@ -797,9 +804,10 @@ Svara i EXAKT detta format (håll dig strikt till rubrikerna, ge konkreta URL-ex
 
 @app.post("/api/jobs/{job_id}/analyze")
 def analyze_job(job_id: str):
-    conn = get_db()
-    row = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
-    conn.close()
+    with engine.connect() as conn:
+        row = conn.execute(
+            text("SELECT * FROM jobs WHERE id = :id"), {"id": job_id}
+        ).mappings().fetchone()
 
     if not row:
         raise HTTPException(404, detail="Job not found.")
@@ -880,12 +888,12 @@ async def mevo_chat(req: ChatRequest):
 
 @app.delete("/api/jobs/{job_id}", status_code=204)
 def delete_job(job_id: str):
-    conn = get_db()
-    row = conn.execute("SELECT id FROM jobs WHERE id = ?", (job_id,)).fetchone()
+    with engine.connect() as conn:
+        row = conn.execute(
+            text("SELECT id FROM jobs WHERE id = :id"), {"id": job_id}
+        ).mappings().fetchone()
     if not row:
-        conn.close()
         raise HTTPException(404, detail="Job not found.")
-    conn.execute("DELETE FROM jobs WHERE id = ?", (job_id,))
-    conn.commit()
-    conn.close()
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM jobs WHERE id = :id"), {"id": job_id})
     return None

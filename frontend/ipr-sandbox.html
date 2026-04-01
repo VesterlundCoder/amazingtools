@@ -74,6 +74,7 @@
           <button onclick="setView('graph')" id="v-graph" style="background:#101010;color:#fff;border:none;border-radius:7px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer">Graph</button>
           <button onclick="setView('table')" id="v-table" style="background:#f1f5f9;color:#555;border:1px solid #e2e8f0;border-radius:7px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer">Table</button>
           <button onclick="sandboxReset()" style="background:#fef2f2;border:1px solid #fecaca;color:#dc2626;border-radius:7px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer">↺ Reset</button>
+          <button onclick="exportSandboxCSV()" style="background:#f0fdfc;border:1px solid #b2ede9;color:#0bb4aa;border-radius:7px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer">⬇ Export Link Plan CSV</button>
           <a id="open-results-link" href="#" style="background:#f0fdfc;border:1px solid #b2ede9;color:#0bb4aa;border-radius:7px;padding:5px 14px;font-size:12px;font-weight:600;text-decoration:none">← Back to results</a>
         </div>
       </div>
@@ -339,6 +340,43 @@
     }).join('');
     const badge=document.getElementById('sb-change-badge');
     if(badge)badge.innerHTML=changed?`<span style="background:#e6fdfb;color:#0bb4aa;border:1px solid #b2ede9;padding:1px 8px;border-radius:9999px;font-size:11px;font-weight:700">${changed} changed</span>`:'';
+  }
+
+  /* ── Export Link Plan CSV ── */
+  function exportSandboxCSV() {
+    if (!sbNodes.length) { alert('Load a job first.'); return; }
+    const origSet = new Set(sbOrigLinks.map(l => {
+      const s = l.source?.id??l.source, t = l.target?.id??l.target; return `${s}\u21a6${t}`;
+    }));
+    const sandSet = new Set(sbLinks.map(l => {
+      const s = l.source?.id??l.source, t = l.target?.id??l.target; return `${s}\u21a6${t}`;
+    }));
+    const su = u => u.replace(/^https?:\/\/[^/]+/,'') || '/';
+    const headers = ['URL','Path','Original IPR','Sandbox IPR','Delta','Delta %','Outbound Links Added','Outbound Links Removed'];
+    const q = v => `"${String(v??'').replace(/"/g,'""')}"`;
+    const rows = [...sbNodes]
+      .sort((a,b) => (sbIPR[b.id]||0) - (sbIPR[a.id]||0))
+      .map(n => {
+        const orig  = sbOrigIPR[n.id] || 0;
+        const sand  = sbIPR[n.id]     || 0;
+        const delta = sand - orig;
+        const deltaPct = orig > 0 ? ((delta/orig)*100).toFixed(1)+'%' : (sand > 0 ? '+∞' : '0%');
+        const added = sbLinks
+          .filter(l => (l.source?.id??l.source) === n.id && !origSet.has(`${n.id}\u21a6${l.target?.id??l.target}`))
+          .map(l => su(l.target?.id??l.target)).join('; ');
+        const removed = sbOrigLinks
+          .filter(l => (l.source?.id??l.source) === n.id && !sandSet.has(`${n.id}\u21a6${l.target?.id??l.target}`))
+          .map(l => su(l.target?.id??l.target)).join('; ');
+        return [n.id, su(n.id), orig.toFixed(4), sand.toFixed(4),
+                (delta >= 0 ? '+' : '') + delta.toFixed(4), deltaPct, added, removed].map(q);
+      });
+    const csv = [headers.map(q), ...rows].map(r => r.join(',')).join('\n');
+    const blob = new Blob(['\uFEFF' + csv], {type:'text/csv;charset=utf-8;'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `ipr-link-plan-${currentJobId||'sandbox'}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
   }
 
   /* ── Job loading ── */

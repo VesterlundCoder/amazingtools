@@ -61,6 +61,13 @@
       border-radius: 6px; transition: color .15s;
     }
     #mevo-close-btn:hover { color: #101010; }
+    #mevo-export-btn {
+      background: none; border: 1px solid #b2ede9; cursor: pointer;
+      color: #0bb4aa; font-size: 11px; font-weight: 600; line-height: 1;
+      padding: 3px 8px; border-radius: 6px; transition: background .15s;
+      white-space: nowrap;
+    }
+    #mevo-export-btn:hover { background: #f0fdfc; }
 
     #mevo-messages {
       flex: 1; overflow-y: auto; padding: 14px 14px 8px;
@@ -148,6 +155,7 @@
         <div id="mevo-header-name">MEVO</div>
         <div id="mevo-header-sub">AI • Marknadsföring &amp; SEO</div>
       </div>
+      <button id="mevo-export-btn" title="Ladda ner chatt som CSV">⬇ CSV</button>
       <button id="mevo-close-btn" title="Stäng">✕</button>
     </div>
     <div id="mevo-messages"></div>
@@ -260,12 +268,33 @@
     }
   }
 
+  /* ── Export chat history as CSV ─────────────────────────────────────────── */
+  function exportChat() {
+    const allMessages = [{role:'assistant', content: GREETING}, ...history];
+    if (allMessages.length === 0) return;
+    const q  = v => `"${String(v).replace(/"/g,'""')}"`;
+    const ts = new Date().toISOString().slice(0,16).replace('T',' ');
+    const rows = allMessages.map((m, i) => [
+      q(i + 1),
+      q(m.role === 'user' ? 'Du' : 'MEVO'),
+      q(m.content),
+    ].join(','));
+    const csv = ['"#","Avsändare","Meddelande"', ...rows].join('\n');
+    const blob = new Blob(['\uFEFF' + csv], {type:'text/csv;charset=utf-8;'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `mevo-chatt-${ts.replace(/[: ]/g,'-')}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
   /* ── Event listeners ─────────────────────────────────────────────────────── */
   fab.addEventListener('click', togglePanel);
   panel.querySelector('#mevo-close-btn').addEventListener('click', () => {
     isOpen = false;
     panel.classList.add('mevo-hidden');
   });
+  panel.querySelector('#mevo-export-btn').addEventListener('click', exportChat);
 
   sendBtn.addEventListener('click', sendMessage);
   input.addEventListener('keydown', e => {
