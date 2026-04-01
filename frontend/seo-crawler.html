@@ -132,6 +132,35 @@
           </label>
         </div>
       </div>
+      <!-- Playwright advanced options (shown when JS rendering is ticked) -->
+      <div id="pw-options" style="display:none;margin-top:14px;padding:14px 16px;background:#f0fdfc;border:1px solid #b2ede9;border-radius:10px">
+        <p style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#0bb4aa;margin:0 0 10px">Playwright Options</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px">
+          <div>
+            <label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:4px">User-Agent</label>
+            <select id="pw-ua" style="width:100%;border:1px solid #e2e8f0;border-radius:7px;padding:5px 8px;font-size:12px;outline:none">
+              <option value="default">Default (AmazingTools)</option>
+              <option value="googlebot_desktop">Googlebot Desktop</option>
+              <option value="googlebot_mobile">Googlebot Smartphone</option>
+            </select>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;padding-top:18px">
+            <label style="font-size:12px;font-weight:500;color:#555;display:flex;align-items:center;gap:7px;cursor:pointer" title="Block analytics scripts, trackers and ad networks to speed up rendering">
+              <input type="checkbox" id="pw-block" style="width:14px;height:14px;accent-color:#0bb4aa"/> Block trackers / analytics
+            </label>
+            <label style="font-size:12px;font-weight:500;color:#555;display:flex;align-items:center;gap:7px;cursor:pointer" title="Scroll to bottom of page to trigger infinite-scroll / lazy-loaded content">
+              <input type="checkbox" id="pw-scroll" style="width:14px;height:14px;accent-color:#0bb4aa"/> Scroll (infinite scroll)
+            </label>
+            <label style="font-size:12px;font-weight:500;color:#555;display:flex;align-items:center;gap:7px;cursor:pointer" title="Automatically attempt to close cookie banners, modals and popups">
+              <input type="checkbox" id="pw-modals" style="width:14px;height:14px;accent-color:#0bb4aa"/> Dismiss modals / popups
+            </label>
+          </div>
+        </div>
+        <div style="margin-top:10px">
+          <label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:4px">Auth cookies <span style="font-weight:400;color:#aaa">(JSON array — for staging / locked environments)</span></label>
+          <input type="text" id="pw-cookies" placeholder='[{"name":"session","value":"abc","domain":"example.com","path":"/"}]' style="width:100%;border:1px solid #e2e8f0;border-radius:7px;padding:5px 10px;font-size:11px;font-family:monospace;outline:none"/>
+        </div>
+      </div>
     </div>
 
     <div style="display:flex;align-items:center;gap:14px">
@@ -213,6 +242,11 @@
 
   updateCompCount();
 
+  /* Show/hide Playwright advanced options panel */
+  document.getElementById('use-playwright').addEventListener('change', function() {
+    document.getElementById('pw-options').style.display = this.checked ? '' : 'none';
+  });
+
   /* Start crawl */
   async function startCrawl() {
     const clientUrl = document.getElementById('client-url').value.trim();
@@ -227,6 +261,11 @@
     const usePlaywright = document.getElementById('use-playwright').checked;
     const calcIPR       = document.getElementById('calculate-ipr').checked;
     const useAhrefs     = document.getElementById('use-ahrefs').checked;
+    const pwUa          = document.getElementById('pw-ua').value;
+    const pwBlock       = document.getElementById('pw-block').checked;
+    const pwScroll      = document.getElementById('pw-scroll').checked;
+    const pwModals      = document.getElementById('pw-modals').checked;
+    const pwCookies     = document.getElementById('pw-cookies').value.trim();
 
     const btn = document.getElementById('start-btn');
     const msg = document.getElementById('start-msg');
@@ -246,6 +285,11 @@
           use_playwright:   usePlaywright,
           calculate_ipr:    calcIPR,
           use_ahrefs:       useAhrefs,
+          playwright_ua:              pwUa,
+          playwright_block_resources: pwBlock,
+          playwright_scroll:          pwScroll,
+          playwright_dismiss_modals:  pwModals,
+          playwright_auth_cookies:    pwCookies,
         })
       });
 

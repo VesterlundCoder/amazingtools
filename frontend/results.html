@@ -116,6 +116,7 @@
           <button class="tab-btn" onclick="showSection('pages',this)">All Pages</button>
           <button class="tab-btn" id="ipr-tab-btn" onclick="showSection('ipr',this)" style="display:none">Link Graph (IPR)</button>
           <button class="tab-btn" id="keywords-tab-btn" onclick="showSection('keywords',this)" style="display:none">Keywords</button>
+          <button class="tab-btn" id="ux-tab-btn" onclick="showSection('ux',this)" style="display:none">UX Analysis</button>
           <button class="tab-btn" onclick="showSection('authority',this)">Authority</button>
         </div>
 
@@ -142,6 +143,11 @@
         <!-- Keywords (Ahrefs) -->
         <div id="section-keywords" style="padding:24px;display:none">
           <div id="keywords-content"></div>
+        </div>
+
+        <!-- UX Analysis (Playwright) -->
+        <div id="section-ux" style="padding:24px;display:none">
+          <div id="ux-content"></div>
         </div>
 
         <!-- Authority (Ahrefs) -->
@@ -259,6 +265,8 @@
                   <th>Images/Alt</th>
                   <th>Ref.Domains</th>
                   <th>Top Keyword</th>
+                  <th>DOM Diff</th>
+                  <th>JS Errors</th>
                   <th>Simulate</th>
                 </tr>
               </thead>
@@ -308,7 +316,7 @@
 
   /* ── Section tabs ── */
   function showSection(name, btn) {
-    ['overview','onpage','links','issues','pages','ipr','keywords','authority'].forEach(s => {
+    ['overview','onpage','links','issues','pages','ipr','keywords','ux','authority'].forEach(s => {
       document.getElementById(`section-${s}`).style.display = s === name ? '' : 'none';
     });
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -834,6 +842,9 @@
     /* Keywords tab — only show if Ahrefs data is present */
     renderKeywordsTab(allPagesData);
 
+    /* UX Analysis tab (Playwright) */
+    renderUXTab(allPagesData);
+
     /* Comparison */
     buildComparison();
   }
@@ -866,6 +877,19 @@
         <td style="font-size:12px">${p.images_without_alt > 0 ? `<span style="color:#b45309">${p.images_without_alt}</span>` : `<span style="color:#059669">0</span>`}</td>
         <td style="text-align:center;font-size:12px">${refCell}</td>
         <td style="max-width:160px;overflow:hidden;font-size:12px">${kwCell}</td>
+        <td style="text-align:center;font-size:11px">${(() => {
+          const s = p.pw_seo || {};
+          const diffs = [s.title_source_diff && 'title', s.meta_desc_diff && 'meta', s.canonical_diff && 'canonical'].filter(Boolean);
+          return diffs.length
+            ? `<span style="color:#dc2626;font-weight:600" title="Changed after JS render: ${diffs.join(', ')}">${diffs.length} diff</span>`
+            : (p.pw_seo ? `<span style="color:#059669">✓</span>` : `<span style="color:#ddd">—</span>`);
+        })()}</td>
+        <td style="text-align:center;font-size:11px">${(() => {
+          const errs = (p.pw_ux || {}).js_errors || [];
+          return errs.length
+            ? `<span style="color:#dc2626;font-weight:600" title="${esc(errs.slice(0,3).join('\n'))}">${errs.length}</span>`
+            : (p.pw_ux ? `<span style="color:#059669">0</span>` : `<span style="color:#ddd">—</span>`);
+        })()}</td>
         <td style="text-align:center">
           <a href="page-sim.html?job=${jid}&url=${encodeURIComponent(p.url)}" target="_blank"
             style="background:#f0fdfc;border:1px solid #b2ede9;color:#0bb4aa;border-radius:6px;padding:2px 9px;font-size:11px;font-weight:600;text-decoration:none;white-space:nowrap">⚡</a>
@@ -879,6 +903,97 @@
     const q = document.getElementById('pages-search').value.toLowerCase();
     const filtered = allPagesData.filter(p => p.url.toLowerCase().includes(q));
     renderPagesTable(filtered);
+  }
+
+  /* ── UX Analysis tab (Playwright) ── */
+  function renderUXTab(pages) {
+    const pwPages = pages.filter(p => p.pw_seo || p.pw_ux || p.pw_architecture);
+    const uxBtn = document.getElementById('ux-tab-btn');
+    if (!pwPages.length) { uxBtn.style.display = 'none'; document.getElementById('ux-content').innerHTML = ''; return; }
+    uxBtn.style.display = '';
+
+    const domDiffPages  = pwPages.filter(p => (p.pw_seo||{}).title_source_diff || (p.pw_seo||{}).meta_desc_diff || (p.pw_seo||{}).canonical_diff);
+    const jsErrPages    = pwPages.filter(p => ((p.pw_ux||{}).js_errors||[]).length > 0);
+    const tapPages      = pwPages.filter(p => ((p.pw_ux||{}).small_tap_targets||[]).length > 0);
+    const thinPages     = pwPages.filter(p => (p.pw_seo||{}).thin_content_warning);
+    const imgPages      = pwPages.filter(p => ((p.pw_ux||{}).non_modern_images||[]).length > 0);
+    const lazyPages     = pwPages.filter(p => ((p.pw_ux||{}).images_lazy_missing||0) > 0);
+    const shadowPages   = pwPages.filter(p => ((p.pw_architecture||{}).shadow_dom_links_found||0) > 0);
+    const noMainPages   = pwPages.filter(p => (p.pw_architecture||{}).main_content_loaded === false);
+
+    const card = (title, val, sub, col) => `
+      <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px 24px;min-width:160px">
+        <div style="font-size:24px;font-weight:800;color:${col}">${val}</div>
+        <div style="font-size:13px;font-weight:600;color:#101010;margin:2px 0">${title}</div>
+        <div style="font-size:11px;color:#aaa">${sub}</div>
+      </div>`;
+    const section = (id, title, rows, cols) => `
+      <div style="margin-top:24px">
+        <p style="font-size:13px;font-weight:700;color:#101010;margin:0 0 10px">${title}</p>
+        <div style="overflow-x:auto;border:1px solid #e2e8f0;border-radius:10px">
+          <table style="width:100%;border-collapse:collapse">
+            <thead><tr>${cols.map(c=>`<th style="text-align:left;padding:8px 14px;background:#f8fafc;color:#888;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #e2e8f0">${c}</th>`).join('')}</tr></thead>
+            <tbody id="ux-tbody-${id}">${rows}</tbody>
+          </table>
+        </div>
+      </div>`;
+
+    const su = u => u.replace(/^https?:\/\/[^/]+/,'') || '/';
+    const link = u => `<a href="${u}" target="_blank" style="color:#0bb4aa;font-size:12px">${esc(su(u))}</a>`;
+
+    let html = `<div style="margin-bottom:20px">
+      <p style="font-size:13px;font-weight:700;color:#101010;margin:0 0 6px">Playwright Analysis — ${pwPages.length} pages analysed</p>
+      <p style="font-size:12px;color:#888;margin:0">DOM diffing, JS errors, tap targets, image optimisation, content checks.</p>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:8px">
+      ${card('DOM Diffs', domDiffPages.length, 'SEO tags changed post-render', domDiffPages.length?'#dc2626':'#059669')}
+      ${card('JS Errors', jsErrPages.length, 'pages with JS exceptions', jsErrPages.length?'#dc2626':'#059669')}
+      ${card('Tap Issues', tapPages.length, 'pages with small targets', tapPages.length?'#b45309':'#059669')}
+      ${card('Thin Content', thinPages.length, 'pages < 300 chars text', thinPages.length?'#b45309':'#059669')}
+      ${card('Non-Modern Images', imgPages.length, 'pages with JPG/PNG (not WebP/AVIF)', imgPages.length?'#b45309':'#059669')}
+      ${card('Lazy Missing', lazyPages.length, 'pages with un-lazy below-fold imgs', lazyPages.length?'#b45309':'#059669')}
+      ${card('Shadow DOM Links', shadowPages.length, 'pages with shadow-root links', shadowPages.length?'#0bb4aa':'#aaa')}
+      ${card('No Main Content', noMainPages.length, 'pages without &lt;main&gt;/&lt;article&gt;', noMainPages.length?'#b45309':'#059669')}
+    </div>`;
+
+    if (domDiffPages.length) {
+      const rows = domDiffPages.map(p => {
+        const s = p.pw_seo || {};
+        const diffs = [s.title_source_diff&&`Title: "${esc((s.title_rendered||'').substring(0,40))}"`,s.meta_desc_diff&&'Meta description',s.canonical_diff&&'Canonical URL'].filter(Boolean);
+        return `<tr><td style="padding:7px 14px">${link(p.url)}</td><td style="padding:7px 14px;font-size:12px;color:#dc2626">${diffs.join(' · ')}</td></tr>`;
+      }).join('');
+      html += section('dom', 'DOM Diffs — SEO tags changed by JavaScript', rows, ['URL','Changed fields']);
+    }
+    if (jsErrPages.length) {
+      const rows = jsErrPages.map(p => {
+        const errs = (p.pw_ux||{}).js_errors || [];
+        return `<tr><td style="padding:7px 14px">${link(p.url)}</td><td style="padding:7px 14px;font-size:11px;color:#dc2626;max-width:400px">${errs.slice(0,3).map(esc).join('<br>')}</td></tr>`;
+      }).join('');
+      html += section('jserr', 'JavaScript Errors', rows, ['URL','Errors']);
+    }
+    if (tapPages.length) {
+      const rows = tapPages.map(p => {
+        const t = (p.pw_ux||{}).small_tap_targets || [];
+        return `<tr><td style="padding:7px 14px">${link(p.url)}</td><td style="padding:7px 14px;font-size:11px;color:#b45309">${t.slice(0,8).map(esc).join(', ')}</td></tr>`;
+      }).join('');
+      html += section('tap', 'Small Tap Targets (< 48×48 px WCAG)', rows, ['URL','Elements']);
+    }
+    if (imgPages.length) {
+      const rows = imgPages.map(p => {
+        const imgs = (p.pw_ux||{}).non_modern_images || [];
+        const lazy = (p.pw_ux||{}).images_lazy_missing || 0;
+        return `<tr><td style="padding:7px 14px">${link(p.url)}</td><td style="padding:7px 14px;font-size:11px;color:#b45309">${imgs.slice(0,4).map(esc).join('<br>')}</td><td style="padding:7px 14px;text-align:center;font-size:12px">${lazy > 0 ? `<span style="color:#b45309">${lazy}</span>` : `<span style="color:#aaa">0</span>`}</td></tr>`;
+      }).join('');
+      html += section('img', 'Image Optimisation — Non-WebP/AVIF & Missing Lazy Loading', rows, ['URL','Non-modern images','Lazy missing']);
+    }
+    if (thinPages.length) {
+      const rows = thinPages.map(p => {
+        const r = (p.pw_seo||{}).text_html_ratio || 0;
+        return `<tr><td style="padding:7px 14px">${link(p.url)}</td><td style="padding:7px 14px;text-align:center;font-size:12px;color:#b45309">${Math.round(r*100)}%</td></tr>`;
+      }).join('');
+      html += section('thin', 'Thin Content (< 300 visible characters)', rows, ['URL','Text/HTML ratio']);
+    }
+    document.getElementById('ux-content').innerHTML = html;
   }
 
   /* ── Keywords tab (Ahrefs per-page organic keywords) ── */

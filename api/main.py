@@ -31,6 +31,7 @@ from pydantic import BaseModel, HttpUrl
 
 from crawler_engine import crawl_multiple, compute_ipr
 from ahrefs_client import fetch_ref_domains, fetch_organic_keywords
+from playwright_analysis import run_playwright_analysis
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -117,6 +118,12 @@ class CrawlRequest(BaseModel):
     use_playwright:  bool      = False
     calculate_ipr:   bool      = False
     use_ahrefs:      bool      = False
+    # Enhanced Playwright analysis options
+    playwright_ua:              str  = "default"   # googlebot_desktop | googlebot_mobile | default
+    playwright_block_resources: bool = False        # block analytics/trackers
+    playwright_scroll:          bool = False        # trigger infinite scroll
+    playwright_dismiss_modals:  bool = False        # try to close popups
+    playwright_auth_cookies:    str  = ""          # JSON array of cookie dicts
 
 
 class SemanticRequest(BaseModel):
@@ -146,7 +153,10 @@ class JobSummary(BaseModel):
 def run_crawl(job_id: str, client_url: str, competitor_urls: list[str],
               max_pages: int, check_externals: bool, respect_robots: bool,
               use_playwright: bool = False, calculate_ipr: bool = False,
-              use_ahrefs: bool = False):
+              use_ahrefs: bool = False,
+              playwright_ua: str = "default", playwright_block_resources: bool = False,
+              playwright_scroll: bool = False, playwright_dismiss_modals: bool = False,
+              playwright_auth_cookies: str = ""):
 
     db_update(job_id, status="running", started_at=datetime.now(timezone.utc).isoformat())
     total_pages = 0
@@ -170,6 +180,45 @@ def run_crawl(job_id: str, client_url: str, competitor_urls: list[str],
 
         # results is already dict[url -> plain dict]
         results_dict = results
+
+        # ── Playwright enhanced analysis (client URL only) ─────────────────
+        if use_playwright:
+            client_result = results_dict.get(client_url, {})
+            pages = client_result.get("pages", [])
+            urls_to_analyse = [
+                p.get("url") for p in pages
+                if p.get("url") and (p.get("status_code") or 0) == 200
+            ][:50]  # cap at 50 pages per analysis run
+            if urls_to_analyse:
+                import json as _json
+                _cookies = []
+                if playwright_auth_cookies:
+                    try:
+                        _cookies = _json.loads(playwright_auth_cookies)
+                    except Exception:
+                        pass
+                pw_options = {
+                    "user_agent":       playwright_ua,
+                    "block_resources":  playwright_block_resources,
+                    "scroll_pages":     playwright_scroll,
+                    "dismiss_modals":   playwright_dismiss_modals,
+                    "auth_cookies":     _cookies,
+                }
+                logger.info("Playwright analysis: %d pages for %s", len(urls_to_analyse), client_url)
+                try:
+                    pw_results = run_playwright_analysis(urls_to_analyse, pw_options)
+                    for page in pages:
+                        purl = page.get("url", "")
+                        if purl in pw_results:
+                            pw = pw_results[purl]
+                            page.update({
+                                "pw_seo":          pw.get("seo", {}),
+                                "pw_ux":           pw.get("ux", {}),
+                                "pw_architecture": pw.get("architecture", {}),
+                            })
+                    logger.info("Playwright analysis complete for %s", client_url)
+                except Exception as _pw_err:
+                    logger.error("Playwright analysis failed: %s", _pw_err)
 
         # ── Ahrefs enrichment (client URL only) ─────────────────────────────
         if use_ahrefs:
@@ -256,6 +305,9 @@ def start_crawl(req: CrawlRequest, background_tasks: BackgroundTasks):
         req.client_url, req.competitor_urls,
         req.max_pages, req.check_externals, req.respect_robots,
         req.use_playwright, req.calculate_ipr, req.use_ahrefs,
+        req.playwright_ua, req.playwright_block_resources,
+        req.playwright_scroll, req.playwright_dismiss_modals,
+        req.playwright_auth_cookies,
     )
 
     return {"id": job_id, "status": "pending", "created_at": now}
