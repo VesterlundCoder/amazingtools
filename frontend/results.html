@@ -140,6 +140,7 @@
           <button class="tab-btn" id="ipr-tab-btn" onclick="showSection('ipr',this)" style="display:none">Link Graph (IPR)</button>
           <button class="tab-btn" id="keywords-tab-btn" onclick="showSection('keywords',this)" style="display:none">Keywords</button>
           <button class="tab-btn" id="ux-tab-btn" onclick="showSection('ux',this)" style="display:none">UX Analysis</button>
+          <button class="tab-btn" onclick="showSection('cwv',this)">Core Web Vitals</button>
           <button class="tab-btn" onclick="showSection('authority',this)">Authority</button>
         </div>
 
@@ -173,6 +174,32 @@
           <div id="ux-content"></div>
         </div>
 
+        <!-- Core Web Vitals (PageSpeed Insights) -->
+        <div id="section-cwv" style="padding:24px;display:none">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px">
+            <div>
+              <p style="font-size:13px;font-weight:700;color:#101010;margin:0 0 4px">Core Web Vitals — Google PageSpeed Insights</p>
+              <p style="font-size:12px;color:#888;margin:0">Real-world performance measured by Lighthouse. Green = Good · Yellow = Needs improvement · Red = Poor.</p>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <input id="cwv-url-input" type="text" placeholder="URL to test…"
+                style="border:1px solid #e2e8f0;border-radius:7px;padding:7px 12px;font-size:12px;outline:none;width:300px"/>
+              <select id="cwv-strategy" style="border:1px solid #e2e8f0;border-radius:7px;padding:7px 10px;font-size:12px;outline:none">
+                <option value="both">Mobile + Desktop</option>
+                <option value="mobile">Mobile only</option>
+                <option value="desktop">Desktop only</option>
+              </select>
+              <button onclick="fetchCWV()" id="cwv-btn"
+                style="background:#101010;color:#fff;border:none;border-radius:8px;padding:7px 18px;font-size:13px;font-weight:600;cursor:pointer">
+                Run PageSpeed
+              </button>
+            </div>
+          </div>
+          <div id="cwv-loading" style="display:none;text-align:center;padding:40px;color:#aaa;font-size:14px">Running Lighthouse… this takes ~10s per strategy.</div>
+          <div id="cwv-error" style="display:none;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:14px;color:#dc2626;font-size:13px;margin-bottom:16px"></div>
+          <div id="cwv-content"></div>
+        </div>
+
         <!-- Authority (Ahrefs) -->
         <div id="section-authority" style="padding:24px;display:none">
           <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px">
@@ -190,11 +217,6 @@
                 Fetch Ahrefs Data
               </button>
             </div>
-          </div>
-
-          <!-- Note about PageSpeed -->
-          <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;font-size:12px;color:#92400e;margin-bottom:20px">
-            <strong>Note:</strong> Ahrefs provides backlink/DR data only — not PageSpeed or Core Web Vitals. For CWV, a Google PageSpeed Insights API key is required (added to todo).
           </div>
 
           <div id="authority-loading" style="display:none;text-align:center;padding:40px;color:#aaa;font-size:14px">
@@ -350,14 +372,128 @@
   let jobData = null;
   let currentDomain = null;
   let allPagesData = [];
+  let cwvData = {};  /* { mobile: {...}, desktop: {...} } — populated by fetchCWV */
 
   /* ── Section tabs ── */
   function showSection(name, btn) {
-    ['overview','onpage','links','issues','pages','ipr','keywords','ux','authority'].forEach(s => {
+    ['overview','onpage','links','issues','pages','ipr','keywords','ux','cwv','authority'].forEach(s => {
       document.getElementById(`section-${s}`).style.display = s === name ? '' : 'none';
     });
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
+  }
+
+  /* ── Core Web Vitals (PageSpeed Insights) ── */
+  async function fetchCWV() {
+    const url = document.getElementById('cwv-url-input').value.trim();
+    if (!url) { alert('Enter a URL to test.'); return; }
+    const strategy = document.getElementById('cwv-strategy').value;
+    const btn = document.getElementById('cwv-btn');
+    btn.disabled = true; btn.textContent = 'Running…';
+    document.getElementById('cwv-loading').style.display = 'block';
+    document.getElementById('cwv-error').style.display   = 'none';
+    document.getElementById('cwv-content').innerHTML     = '';
+    cwvData = {};
+
+    const strategies = strategy === 'both' ? ['mobile','desktop'] : [strategy];
+    try {
+      const results = await Promise.all(strategies.map(s =>
+        fetch(`${API_BASE}/api/analyze/pagespeed?url=${encodeURIComponent(url)}&strategy=${s}`)
+          .then(async r => { if (!r.ok) throw new Error((await r.json().catch(()=>({}))).detail || `HTTP ${r.status}`); return r.json(); })
+      ));
+      results.forEach(r => { cwvData[r.strategy] = r; });
+      renderCWV(cwvData, url);
+      updateMevoContextCWV(cwvData, url);
+      buildCriticalAlerts(jobData?.results?.[currentDomain] || {});
+    } catch(e) {
+      document.getElementById('cwv-error').style.display = 'block';
+      document.getElementById('cwv-error').textContent   = `PageSpeed error: ${e.message}`;
+    } finally {
+      document.getElementById('cwv-loading').style.display = 'none';
+      btn.disabled = false; btn.textContent = 'Run PageSpeed';
+    }
+  }
+
+  function cwvColor(metric, val) {
+    const thresholds = {
+      fcp_ms:       [1800, 3000],
+      lcp_ms:       [2500, 4000],
+      cls:          [0.1,  0.25],
+      tbt_ms:       [200,  600],
+      speed_index_ms:[3400,5800],
+      tti_ms:       [3800, 7300],
+    };
+    const [good, poor] = thresholds[metric] || [Infinity, Infinity];
+    if (val <= good)  return '#059669';
+    if (val <= poor)  return '#f59e0b';
+    return '#dc2626';
+  }
+
+  function cwvLabel(ms) {
+    return ms >= 1000 ? (ms/1000).toFixed(1)+'s' : ms+'ms';
+  }
+
+  function renderCWV(data, url) {
+    const strategies = Object.keys(data);
+    if (!strategies.length) return;
+
+    const metricDefs = [
+      { key:'performance_score', label:'Performance Score', fmt: v => v+'/100', thresholds:[90,50] },
+      { key:'fcp_ms',   label:'FCP',           fmt: cwvLabel,  thresholds:[1800,3000] },
+      { key:'lcp_ms',   label:'LCP',           fmt: cwvLabel,  thresholds:[2500,4000] },
+      { key:'cls',      label:'CLS',           fmt: v => v,    thresholds:[0.1, 0.25] },
+      { key:'tbt_ms',   label:'TBT',           fmt: cwvLabel,  thresholds:[200, 600]  },
+      { key:'speed_index_ms', label:'Speed Index', fmt: cwvLabel, thresholds:[3400,5800] },
+      { key:'tti_ms',   label:'TTI',           fmt: cwvLabel,  thresholds:[3800,7300] },
+    ];
+
+    const scoreColor = (val, good, poor) =>
+      val >= good ? '#059669' : val >= poor ? '#f59e0b' : '#dc2626';
+
+    const metricCard = (def, val) => {
+      const col = def.key === 'performance_score'
+        ? scoreColor(val, def.thresholds[0], def.thresholds[1])
+        : cwvColor(def.key, val);
+      const bg  = col === '#059669' ? '#f0fdf4' : col === '#f59e0b' ? '#fffbeb' : '#fff5f5';
+      const label = col === '#059669' ? 'Good' : col === '#f59e0b' ? 'Needs improvement' : 'Poor';
+      return `<div style="background:${bg};border:1px solid ${col}30;border-radius:12px;padding:16px 20px;min-width:130px;text-align:center">
+        <div style="font-size:22px;font-weight:800;color:${col}">${def.fmt(val)}</div>
+        <div style="font-size:12px;font-weight:600;color:#101010;margin:3px 0">${def.label}</div>
+        <div style="font-size:11px;color:${col};font-weight:600">${label}</div>
+      </div>`;
+    };
+
+    let html = `<p style="font-size:12px;color:#888;margin:0 0 16px">Tested URL: <a href="${esc(url)}" target="_blank" style="color:#0bb4aa">${esc(url)}</a></p>`;
+
+    strategies.forEach(s => {
+      const d = data[s];
+      html += `<div style="margin-bottom:28px">
+        <p style="font-size:14px;font-weight:700;color:#101010;margin:0 0 12px;text-transform:capitalize">
+          ${s === 'mobile' ? '📱' : '🖥'} ${s.charAt(0).toUpperCase()+s.slice(1)}
+          <span style="font-size:11px;font-weight:400;color:#888;margin-left:8px">via Google Lighthouse</span>
+        </p>
+        <div style="display:flex;flex-wrap:wrap;gap:10px">
+          ${metricDefs.map(def => metricCard(def, d[def.key])).join('')}
+        </div>
+      </div>`;
+    });
+
+    html += `<p style="font-size:11px;color:#aaa;margin-top:8px">
+      Thresholds: FCP &lt;1.8s good &lt;3s avg · LCP &lt;2.5s good &lt;4s avg · CLS &lt;0.1 good &lt;0.25 avg · TBT &lt;200ms good &lt;600ms avg
+    </p>`;
+
+    document.getElementById('cwv-content').innerHTML = html;
+  }
+
+  function updateMevoContextCWV(data, url) {
+    const lines = [`Core Web Vitals for ${url}:`];
+    ['mobile','desktop'].forEach(s => {
+      const d = data[s];
+      if (!d) return;
+      lines.push(`  ${s.toUpperCase()}: Performance ${d.performance_score}/100 | FCP ${cwvLabel(d.fcp_ms)} | LCP ${cwvLabel(d.lcp_ms)} | CLS ${d.cls} | TBT ${cwvLabel(d.tbt_ms)} | Speed Index ${cwvLabel(d.speed_index_ms)}`);
+    });
+    const prev = (typeof window.MEVO_CONTEXT === 'string') ? window.MEVO_CONTEXT : '';
+    window.MEVO_CONTEXT = prev + '\n\n' + lines.join('\n');
   }
 
   /* ── Ahrefs / Authority ── */
@@ -656,6 +792,40 @@
     if (lazyPages > 0)
       alerts.push({lvl:'warning', icon:'⚠️', title:`${lazyPages} page(s) have lazy-loaded images above the fold`,
         desc:'Above-fold images with loading="lazy" delay LCP — the most heavily weighted Core Web Vital. Remove lazy loading from hero images.'});
+
+    /* CWV checks — only if PageSpeed has been run */
+    const cwvMobile  = cwvData.mobile  || {};
+    const cwvDesktop = cwvData.desktop || {};
+    const worstLCP = Math.max(cwvMobile.lcp_ms||0, cwvDesktop.lcp_ms||0);
+    const worstFCP = Math.max(cwvMobile.fcp_ms||0, cwvDesktop.fcp_ms||0);
+    const worstCLS = Math.max(cwvMobile.cls||0,    cwvDesktop.cls||0);
+    const worstTBT = Math.max(cwvMobile.tbt_ms||0, cwvDesktop.tbt_ms||0);
+    const lowestPerf = cwvMobile.performance_score != null || cwvDesktop.performance_score != null
+      ? Math.min(cwvMobile.performance_score??100, cwvDesktop.performance_score??100) : null;
+    if (worstLCP > 4000)
+      alerts.push({lvl:'critical', icon:'🔴', title:`LCP is ${(worstLCP/1000).toFixed(1)}s — well above the 2.5s threshold`,
+        desc:'Largest Contentful Paint is a top Google ranking signal. Optimise your hero image/video and reduce server response time.'});
+    else if (worstLCP > 2500)
+      alerts.push({lvl:'warning', icon:'🟡', title:`LCP is ${(worstLCP/1000).toFixed(1)}s — needs improvement (threshold: 2.5s)`,
+        desc:'Compress your LCP element, use a CDN, and preload critical images with <link rel=preload>.'});
+    if (worstFCP > 3000)
+      alerts.push({lvl:'critical', icon:'🔴', title:`FCP is ${(worstFCP/1000).toFixed(1)}s — poor (threshold: 1.8s)`,
+        desc:'First Contentful Paint affects perceived load speed. Eliminate render-blocking resources and reduce server response time.'});
+    else if (worstFCP > 1800)
+      alerts.push({lvl:'warning', icon:'🟡', title:`FCP is ${(worstFCP/1000).toFixed(1)}s — needs improvement`,
+        desc:'Defer non-critical CSS/JS and preconnect to third-party origins to improve FCP.'});
+    if (worstCLS > 0.25)
+      alerts.push({lvl:'critical', icon:'🔴', title:`CLS is ${worstCLS.toFixed(3)} — poor (threshold: 0.1)`,
+        desc:'Cumulative Layout Shift causes elements to jump around during load. Set explicit width/height on images and avoid injecting content above existing content.'});
+    else if (worstCLS > 0.1)
+      alerts.push({lvl:'warning', icon:'🟡', title:`CLS is ${worstCLS.toFixed(3)} — needs improvement`,
+        desc:'Add size attributes to all media elements and reserve space for ads/embeds.'});
+    if (worstTBT > 600)
+      alerts.push({lvl:'critical', icon:'🔴', title:`TBT is ${worstTBT}ms — poor (threshold: 200ms)`,
+        desc:'Total Blocking Time indicates heavy JavaScript blocking the main thread. Split large bundles and defer non-critical scripts.'});
+    if (lowestPerf !== null && lowestPerf < 50)
+      alerts.push({lvl:'critical', icon:'🔴', title:`Performance score ${lowestPerf}/100 — poor`,
+        desc:'Overall Lighthouse performance is critically low. Address LCP, TBT, and CLS issues first for the fastest gains.'});
 
     const banner = document.getElementById('alert-banner');
     if (!alerts.length) { banner.style.display = 'none'; return; }
@@ -973,6 +1143,11 @@
     currentDomain = domain;
     const data = jobData.results[domain];
     if (!data) return;
+
+    /* Pre-fill CWV URL input with current domain */
+    cwvData = {};
+    document.getElementById('cwv-content').innerHTML = '';
+    document.getElementById('cwv-url-input').value = domain.replace(/\/$/, '');
 
     buildCriticalAlerts(data);
     document.getElementById('scorecard').innerHTML = buildScorecard(data.summary);

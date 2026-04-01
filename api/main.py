@@ -598,6 +598,67 @@ async def ahrefs_analysis(req: AhrefsRequest):
     }
 
 
+# ── PageSpeed Insights ────────────────────────────────────────────────────────
+
+@app.get("/api/analyze/pagespeed")
+async def pagespeed_analysis(url: str, strategy: str = "mobile"):
+    """
+    Calls Google PageSpeed Insights v5 API and returns structured CWV metrics.
+    Requires PSI_API_KEY environment variable.
+    strategy: "mobile" | "desktop"
+    """
+    api_key = os.environ.get("PSI_API_KEY")
+    if not api_key:
+        raise HTTPException(500, detail="PSI_API_KEY not configured on server.")
+
+    try:
+        async with httpx.AsyncClient(timeout=60) as c:
+            r = await c.get(
+                "https://www.googleapis.com/pagespeedonline/v5/runPagespeed",
+                params={
+                    "url":      url,
+                    "key":      api_key,
+                    "strategy": strategy,
+                    "category": "performance",
+                },
+            )
+            if r.status_code != 200:
+                raise HTTPException(r.status_code,
+                    detail=f"PSI API error {r.status_code}: {r.text[:300]}")
+            data = r.json()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(502, detail=f"PSI unreachable: {e}")
+
+    lhr      = data.get("lighthouseResult", {})
+    audits   = lhr.get("audits", {})
+    cats     = lhr.get("categories", {})
+
+    def ms(key):   return round(audits.get(key, {}).get("numericValue") or 0)
+    def sc(key):   return round((audits.get(key, {}).get("score") or 0) * 100)
+    def flt(key):  return round(audits.get(key, {}).get("numericValue") or 0, 3)
+
+    perf = round((cats.get("performance", {}).get("score") or 0) * 100)
+
+    return {
+        "url":               url,
+        "strategy":          strategy,
+        "performance_score": perf,
+        "fcp_ms":            ms("first-contentful-paint"),
+        "lcp_ms":            ms("largest-contentful-paint"),
+        "cls":               flt("cumulative-layout-shift"),
+        "tbt_ms":            ms("total-blocking-time"),
+        "speed_index_ms":    ms("speed-index"),
+        "tti_ms":            ms("interactive"),
+        "fcp_score":         sc("first-contentful-paint"),
+        "lcp_score":         sc("largest-contentful-paint"),
+        "cls_score":         sc("cumulative-layout-shift"),
+        "tbt_score":         sc("total-blocking-time"),
+        "si_score":          sc("speed-index"),
+    }
+
+
 # ── Ahrefs debug endpoint ─────────────────────────────────────────────────────
 
 @app.get("/api/debug/ahrefs")
