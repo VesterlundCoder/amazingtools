@@ -331,14 +331,34 @@
       const r = await fetch(`${API_BASE}/api/jobs/${jobId}`);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const job = await r.json();
-      if (job.status !== 'done' || !job.results) throw new Error('Job not ready');
-      const pages = job.results[job.client_url]?.pages || [];
+      if (job.status !== 'done' || !job.results) {
+        throw new Error(job.status === 'running' ? 'Crawl is still running — please wait.' :
+                        job.status === 'error'   ? `Crawl failed: ${job.error_message || 'unknown error'}` :
+                        'Job not ready');
+      }
+      /* Key lookup: exact match first, then normalised (no trailing slash), then first domain */
+      const key = job.results[job.client_url] ? job.client_url
+                : job.results[job.client_url?.replace(/\/$/, '')] ? job.client_url.replace(/\/$/, '')
+                : Object.keys(job.results)[0];
+      const domainData = key ? job.results[key] : null;
+      const pages = domainData?.pages || [];
+
       document.getElementById('state-loading').style.display = 'none';
+
+      if (!pages.length) {
+        document.getElementById('state-loading').style.display = '';
+        document.getElementById('state-loading').innerHTML =
+          `<p style="color:#b45309;font-size:14px">No page data found for this job.<br>
+           <span style="font-size:12px;color:#aaa">Re-crawl with "Calculate IPR" enabled to use the simulator.</span></p>`;
+        return;
+      }
+
       initSim(pages, jobId, targetUrl);
       /* Show URL switcher only when no specific page was passed */
       if (!targetUrl) document.getElementById('url-switcher').style.display = '';
     } catch(e) {
-      document.getElementById('state-loading').textContent = `Error: ${e.message}`;
+      document.getElementById('state-loading').innerHTML =
+        `<p style="color:#dc2626;font-size:14px">Error: ${esc(e.message)}</p>`;
     }
   }
 

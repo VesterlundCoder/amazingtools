@@ -227,7 +227,7 @@
           </div>
           <div id="expand-${i}" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid #f1f5f9">
             <p style="font-size:13px;color:#333;line-height:1.7;margin:0 0 12px">${esc(s.text)}</p>
-            <button onclick="rewriteSection(${i}, ${JSON.stringify(s.text).replace(/</g,'\\u003c')}, '${encodeURIComponent(document.getElementById('query-input').value)}')"
+            <button onclick="rewriteSection(${i}, '${encodeURIComponent(s.text)}', '${encodeURIComponent(document.getElementById('query-input').value)}')"
               style="background:#0bb4aa;color:#fff;border:none;border-radius:7px;padding:7px 16px;font-size:12px;font-weight:600;cursor:pointer"
               id="rewrite-btn-${i}">
               ✦ Rewrite with GPT
@@ -250,7 +250,8 @@
     row.classList.toggle('expanded', open);
   }
 
-  async function rewriteSection(i, text, encodedQuery) {
+  async function rewriteSection(i, encodedText, encodedQuery) {
+    const text  = decodeURIComponent(encodedText);
     const query = decodeURIComponent(encodedQuery);
     const btn   = document.getElementById(`rewrite-btn-${i}`);
     const box   = document.getElementById(`rewrite-result-${i}`);

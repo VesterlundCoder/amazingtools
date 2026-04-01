@@ -590,6 +590,46 @@ async def ahrefs_analysis(req: AhrefsRequest):
     }
 
 
+# ── Ahrefs debug endpoint ─────────────────────────────────────────────────────
+
+@app.get("/api/debug/ahrefs")
+async def debug_ahrefs(url: str = "https://ahrefs.com"):
+    """
+    Raw Ahrefs API probe. Hit this to see exactly what the API returns
+    so field names / auth issues can be diagnosed.
+    Example: GET /api/debug/ahrefs?url=https://example.com
+    """
+    api_key = os.environ.get("AHREFS_API_KEY", "")
+    if not api_key:
+        return {"error": "AHREFS_API_KEY not set on server"}
+
+    from urllib.parse import urlparse as _up
+    _parsed = _up(url if url.startswith("http") else f"https://{url}")
+    domain  = _parsed.netloc or url.strip("/")
+
+    results: dict = {}
+    for label, path, params in [
+        ("refdomains_sample", "site-explorer/refdomains",
+         {"target": domain, "mode": "domain", "select": "domain_rating_source,referring_domain", "limit": "3"}),
+        ("organic_kw_sample", "site-explorer/organic-keywords",
+         {"target": url, "mode": "exact", "select": "keyword,pos,volume,traffic", "limit": "3", "order_by": "traffic:desc"}),
+        ("domain_rating", "site-explorer/domain-rating",
+         {"target": domain, "date": "latest"}),
+    ]:
+        try:
+            async with httpx.AsyncClient(timeout=15) as c:
+                r = await c.get(
+                    f"https://api.ahrefs.com/v3/{path}",
+                    params=params,
+                    headers={"Authorization": f"Bearer {api_key}"},
+                )
+                results[label] = {"status": r.status_code, "body": r.json() if r.status_code == 200 else r.text[:500]}
+        except Exception as e:
+            results[label] = {"error": str(e)}
+
+    return results
+
+
 # ── AI analysis ───────────────────────────────────────────────────────────────
 
 def _build_prompt(results: dict) -> str:

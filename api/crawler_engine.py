@@ -228,6 +228,95 @@ def _parse_page(url: str, body: bytes, base_netloc: str) -> PageData:
     return p
 
 
+def _fetch_sitemap_urls(base_url: str, base_netloc: str,
+                        session: requests.Session,
+                        robots_txt: Optional[str] = None) -> list:
+    """
+    Discover internal URLs from XML sitemaps.
+    Checks:
+      1. robots.txt for Sitemap: directives
+      2. Common fallback locations (/sitemap.xml, /sitemap_index.xml, /sitemap/)
+    Parses sitemap indexes recursively. Returns a deduplicated list of
+    internal URLs (same netloc as base_url).
+    """
+    import xml.etree.ElementTree as ET
+
+    NS = {
+        "sm":  "http://www.sitemaps.org/schemas/sitemap/0.9",
+        "image": "http://www.google.com/schemas/sitemap-image/1.1",
+        "news":  "http://www.google.com/schemas/sitemap-news/0.9",
+    }
+
+    def _get_xml(url: str) -> Optional[ET.Element]:
+        try:
+            r = session.get(url, timeout=12, allow_redirects=True)
+            if r.status_code != 200:
+                return None
+            ct = r.headers.get("Content-Type", "")
+            if "xml" not in ct and "text" not in ct:
+                return None
+            text = r.text.strip()
+            if not text.startswith("<"):
+                return None
+            return ET.fromstring(text)
+        except Exception:
+            return None
+
+    def _is_internal(url: str) -> bool:
+        return _same_domain(url, base_netloc)
+
+    def _parse_sitemap(root: ET.Element, depth: int = 0) -> list:
+        if root is None or depth > 3:
+            return []
+        urls: list = []
+        tag = root.tag.lower()
+        # Sitemap index — recurse into child sitemaps
+        if "sitemapindex" in tag:
+            for sm in root.findall(".//{*}loc"):
+                loc = (sm.text or "").strip()
+                if loc and _is_internal(loc):
+                    child = _get_xml(loc)
+                    urls.extend(_parse_sitemap(child, depth + 1))
+        else:
+            # Regular sitemap
+            for url_el in root.findall(".//{*}loc"):
+                loc = (url_el.text or "").strip()
+                if loc and _is_internal(loc):
+                    urls.append(_normalize_url(loc))
+        return urls
+
+    sitemap_urls: list = []
+
+    # 1) Parse Sitemap: directives from robots.txt
+    if robots_txt:
+        for line in robots_txt.splitlines():
+            line = line.strip()
+            if line.lower().startswith("sitemap:"):
+                sm_url = line.split(":", 1)[1].strip()
+                root = _get_xml(sm_url)
+                sitemap_urls.extend(_parse_sitemap(root))
+
+    # 2) Try common sitemap locations if none found yet
+    if not sitemap_urls:
+        for path in ["/sitemap.xml", "/sitemap_index.xml", "/sitemap/sitemap.xml",
+                     "/sitemap/", "/sitemaps/sitemap.xml"]:
+            root = _get_xml(base_url + path)
+            if root is not None:
+                sitemap_urls.extend(_parse_sitemap(root))
+                break  # stop at first successful parse
+
+    # Deduplicate and filter to internal only
+    seen: set = set()
+    result: list = []
+    for u in sitemap_urls:
+        if u and u not in seen and _is_internal(u):
+            seen.add(u)
+            result.append(u)
+
+    logger.info("Sitemap seeded %d URLs for %s", len(result), base_url)
+    return result
+
+
 def _basic_crawl_domain(
     start_url: str,
     max_pages: int = 100,
@@ -257,6 +346,18 @@ def _basic_crawl_domain(
     queue:   deque     = deque()
     queue.append((_normalize_url(start_url), 0))
     visited.add(_normalize_url(start_url))
+
+    # Seed queue from sitemap (depth=1 so start_url is still crawled first)
+    try:
+        sm_urls = _fetch_sitemap_urls(base_url, base_netloc, session, robots_txt)
+        for su in sm_urls:
+            if su not in visited:
+                visited.add(su)
+                queue.append((su, 1))
+        if sm_urls:
+            logger.info("Seeded %d URLs from sitemap for %s", len(sm_urls), base_url)
+    except Exception as _sm_err:
+        logger.debug("Sitemap seed error: %s", _sm_err)
 
     all_internal_urls: set[str] = set()
     linked_from: dict[str, set[str]] = {}  # url -> set of pages linking to it
