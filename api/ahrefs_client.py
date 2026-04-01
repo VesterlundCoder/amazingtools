@@ -30,7 +30,7 @@ def fetch_ref_domains(url: str, api_key: str) -> dict:
             f"{_BASE}/site-explorer/refdomains",
             params={
                 "target":   url,
-                "mode":     "exact",
+                "mode":     "prefix",
                 "select":   "domain_rating_source,referring_domain",
                 "limit":    "1000",
                 "order_by": "domain_rating_source:desc",

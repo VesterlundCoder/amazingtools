@@ -531,7 +531,7 @@ async def ahrefs_analysis(req: AhrefsRequest):
     # 1) Domain Rating — primary signal, raise if it fails
     dr_resp = await _ahrefs_get(
         "site-explorer/domain-rating",
-        {"target": domain, "date": "latest"},
+        {"target": domain},
         api_key,
     )
     dr = float((dr_resp.get("domain") or {}).get("domain_rating", 0))
@@ -542,7 +542,8 @@ async def ahrefs_analysis(req: AhrefsRequest):
     try:
         ref_resp = await _ahrefs_get(
             "site-explorer/refdomains",
-            {"target": domain, "limit": 1, "select": "domain"},
+            {"target": domain, "mode": "domain", "limit": 1,
+             "select": "referring_domain,domain_rating_source"},
             api_key,
         )
         refdomains_count = ref_resp.get("total", 0) or len(ref_resp.get("refdomains") or [])
@@ -621,7 +622,7 @@ async def debug_ahrefs(url: str = "https://ahrefs.com"):
         ("organic_kw_sample", "site-explorer/organic-keywords",
          {"target": url, "mode": "exact", "select": "keyword,pos,volume,traffic", "limit": "3", "order_by": "traffic:desc"}),
         ("domain_rating", "site-explorer/domain-rating",
-         {"target": domain, "date": "latest"}),
+         {"target": domain}),
     ]:
         try:
             async with httpx.AsyncClient(timeout=15) as c:
