@@ -543,13 +543,18 @@ def _orchestrator_crawl_domain(
 
 # ── Internal PageRank (IPR) ─────────────────────────────────────────────────
 
-def compute_ipr(domain_result: dict, damping: float = 0.85, iterations: int = 50) -> dict:
+def compute_ipr(domain_result: dict, damping: float = 0.85, iterations: int = 50,
+                external_authority: "dict[str, float] | None" = None) -> dict:
     """
     Iterative PageRank (d=0.85) over the internal link graph.
     Adds 'ipr' (0-10 normalised score), 'ipr_inbound', 'ipr_outbound' to every page.
     Handles dangling nodes (no outbound links) by redistributing their rank evenly.
     Only counts links between pages that were actually crawled.
-    Modifies domain_result in place and returns it.
+
+    external_authority: optional dict[url -> float] (e.g. ahrefs ref_domains_dr10 count).
+      When provided, 30 % of the teleportation term is directed toward pages proportional
+      to their external authority score, creating a personalised PageRank that boosts
+      pages with strong backlink profiles.
     """
     pages   = domain_result.get("pages", [])
     url_set = {p.get("url", "") for p in pages}
@@ -566,28 +571,42 @@ def compute_ipr(domain_result: dict, damping: float = 0.85, iterations: int = 50
         src   = page.get("url", "")
         links = page.get("internal_links") or []
         seen  = set()
-        for l in links:
-            if isinstance(l, dict):
-                l = l.get("url") or l.get("href", "")
-            if isinstance(l, str) and l in url_set and l != src and l not in seen:
-                seen.add(l)
-                out_links[src].append(l)
-                in_links[l].append(src)
+        for lnk in links:
+            if isinstance(lnk, dict):
+                lnk = lnk.get("url") or lnk.get("href", "")
+            if isinstance(lnk, str) and lnk in url_set and lnk != src and lnk not in seen:
+                seen.add(lnk)
+                out_links[src].append(lnk)
+                in_links[lnk].append(src)
 
-    # Iterative PageRank
-    pr: dict[str, float] = {u: 1.0 / N for u in urls}
+    # ── Personalisation vector ────────────────────────────────────────────────
+    # p[u] is the probability of teleporting to u.
+    # Without external data: uniform (1/N).
+    # With external data:    mix 70 % uniform + 30 % proportional to ext authority.
+    if external_authority:
+        max_ext = max(external_authority.values(), default=0) or 1.0
+        ext_weight = 0.30
+        raw = {u: (1.0 - ext_weight) / N
+                  + ext_weight * (external_authority.get(u, 0.0) / max_ext)
+               for u in urls}
+        total = sum(raw.values()) or 1.0
+        personal: dict[str, float] = {u: v / total for u, v in raw.items()}
+    else:
+        personal = {u: 1.0 / N for u in urls}
+
+    # ── Iterative PageRank ────────────────────────────────────────────────────
+    pr: dict[str, float] = {u: personal[u] for u in urls}
 
     for _ in range(iterations):
-        # Dangling nodes contribute their rank spread evenly across all nodes
         dangling_sum = sum(pr[u] for u in urls if not out_links[u])
         new_pr: dict[str, float] = {}
         for url in urls:
-            rank_in = dangling_sum / N
+            rank_in = dangling_sum * personal[url]
             for src in in_links[url]:
                 out_count = len(out_links[src])
                 if out_count > 0:
                     rank_in += pr[src] / out_count
-            new_pr[url] = (1.0 - damping) / N + damping * rank_in
+            new_pr[url] = (1.0 - damping) * personal[url] + damping * rank_in
         pr = new_pr
 
     # Normalise to 0–10 scale

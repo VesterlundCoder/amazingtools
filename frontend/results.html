@@ -115,6 +115,7 @@
           <button class="tab-btn" onclick="showSection('issues',this)">Issues <span id="issue-count-badge"></span></button>
           <button class="tab-btn" onclick="showSection('pages',this)">All Pages</button>
           <button class="tab-btn" id="ipr-tab-btn" onclick="showSection('ipr',this)" style="display:none">Link Graph (IPR)</button>
+          <button class="tab-btn" id="keywords-tab-btn" onclick="showSection('keywords',this)" style="display:none">Keywords</button>
           <button class="tab-btn" onclick="showSection('authority',this)">Authority</button>
         </div>
 
@@ -136,6 +137,11 @@
         <!-- Issues -->
         <div id="section-issues" style="padding:24px;display:none">
           <div id="issues-content"></div>
+        </div>
+
+        <!-- Keywords (Ahrefs) -->
+        <div id="section-keywords" style="padding:24px;display:none">
+          <div id="keywords-content"></div>
         </div>
 
         <!-- Authority (Ahrefs) -->
@@ -223,6 +229,7 @@
                 <th style="text-align:center">Inbound</th>
                 <th style="text-align:center">Outbound</th>
                 <th style="min-width:160px">Equity Bar</th>
+                <th style="text-align:center">Ref.Domains DR≥10</th>
                 <th style="text-align:center">Simulate</th>
               </tr></thead>
               <tbody id="ipr-tbody"></tbody>
@@ -250,6 +257,8 @@
                   <th>Noindex</th>
                   <th>Int. links</th>
                   <th>Images/Alt</th>
+                  <th>Ref.Domains</th>
+                  <th>Top Keyword</th>
                   <th>Simulate</th>
                 </tr>
               </thead>
@@ -299,7 +308,7 @@
 
   /* ── Section tabs ── */
   function showSection(name, btn) {
-    ['overview','onpage','links','issues','pages','ipr','authority'].forEach(s => {
+    ['overview','onpage','links','issues','pages','ipr','keywords','authority'].forEach(s => {
       document.getElementById(`section-${s}`).style.display = s === name ? '' : 'none';
     });
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -415,6 +424,10 @@
       const barPct   = Math.round((p.ipr / maxIPR) * 100);
       const barColor = p.ipr >= 1 ? '#059669' : p.ipr >= 0.5 ? '#0bb4aa' : '#f59e0b';
       const shortUrl = p.url.replace(/^https?:\/\/[^/]+/, '') || '/';
+      const refDr10  = p.ahrefs_ref_domains_dr10;
+      const refCell  = refDr10 != null
+        ? `<span style="font-weight:600;color:${refDr10>=10?'#059669':refDr10>=3?'#0bb4aa':'#888'}">${refDr10}</span>`
+        : `<span style="color:#ddd">—</span>`;
       return `<tr>
         <td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
           <a href="${p.url}" target="_blank" style="color:#0bb4aa;font-size:12px">${esc(shortUrl)}</a>
@@ -427,6 +440,7 @@
             <div style="background:${barColor};height:100%;width:${barPct}%;border-radius:4px;transition:width .3s"></div>
           </div>
         </td>
+        <td style="text-align:center">${refCell}</td>
         <td style="text-align:center">
           <a href="page-sim.html?job=${new URLSearchParams(location.search).get('job')}&url=${encodeURIComponent(p.url)}" target="_blank"
             style="background:#f0fdfc;border:1px solid #b2ede9;color:#0bb4aa;border-radius:6px;padding:3px 10px;font-size:11px;font-weight:600;text-decoration:none;white-space:nowrap">⚡ Simulate</a>
@@ -817,13 +831,28 @@
     /* IPR tab — only show if data was calculated */
     renderIPR(allPagesData);
 
+    /* Keywords tab — only show if Ahrefs data is present */
+    renderKeywordsTab(allPagesData);
+
     /* Comparison */
     buildComparison();
   }
 
   function renderPagesTable(pages) {
-    document.getElementById('pages-tbody').innerHTML = pages.slice(0,200).map(p => `
-      <tr>
+    const jid = new URLSearchParams(location.search).get('job');
+    document.getElementById('pages-tbody').innerHTML = pages.slice(0,200).map(p => {
+      const refDr10 = p.ahrefs_ref_domains_dr10;
+      const refCell = refDr10 != null
+        ? `<span style="font-weight:600;color:${refDr10>=10?'#059669':refDr10>=3?'#0bb4aa':'#888'}">${refDr10}</span>`
+        : `<span style="color:#ddd">—</span>`;
+      const topKw   = (p.ahrefs_keywords || [])[0];
+      const kwCell  = topKw
+        ? `<span title="Vol: ${topKw.volume.toLocaleString()} | Traffic: ${topKw.traffic}" style="font-size:11px">
+            <strong style="color:#101010">${esc(topKw.keyword)}</strong>
+            <span style="color:#888;margin-left:4px">#${topKw.position}</span>
+           </span>`
+        : `<span style="color:#ddd">—</span>`;
+      return `<tr>
         <td style="min-width:200px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
           <a href="${p.url}" target="_blank" style="color:#0bb4aa;font-size:12px">${esc(p.url)}</a>
         </td>
@@ -835,12 +864,14 @@
         <td style="font-size:12px">${p.noindex ? `<span style="color:#b45309">noindex</span>` : `<span style="color:#aaa">—</span>`}</td>
         <td style="font-size:12px">${p.internal_links_count ?? '—'}</td>
         <td style="font-size:12px">${p.images_without_alt > 0 ? `<span style="color:#b45309">${p.images_without_alt}</span>` : `<span style="color:#059669">0</span>`}</td>
+        <td style="text-align:center;font-size:12px">${refCell}</td>
+        <td style="max-width:160px;overflow:hidden;font-size:12px">${kwCell}</td>
         <td style="text-align:center">
-          <a href="page-sim.html?job=${new URLSearchParams(location.search).get('job')}&url=${encodeURIComponent(p.url)}" target="_blank"
+          <a href="page-sim.html?job=${jid}&url=${encodeURIComponent(p.url)}" target="_blank"
             style="background:#f0fdfc;border:1px solid #b2ede9;color:#0bb4aa;border-radius:6px;padding:2px 9px;font-size:11px;font-weight:600;text-decoration:none;white-space:nowrap">⚡</a>
         </td>
-      </tr>
-    `).join('');
+      </tr>`;
+    }).join('');
     document.getElementById('pages-count-label').textContent = `${pages.length} pages${pages.length > 200 ? ' (showing 200)' : ''}`;
   }
 
@@ -848,6 +879,91 @@
     const q = document.getElementById('pages-search').value.toLowerCase();
     const filtered = allPagesData.filter(p => p.url.toLowerCase().includes(q));
     renderPagesTable(filtered);
+  }
+
+  /* ── Keywords tab (Ahrefs per-page organic keywords) ── */
+  function renderKeywordsTab(pages) {
+    const pagesWithKw = pages.filter(p => p.ahrefs_keywords && p.ahrefs_keywords.length > 0);
+    if (!pagesWithKw.length) {
+      document.getElementById('keywords-tab-btn').style.display = 'none';
+      document.getElementById('keywords-content').innerHTML = '';
+      return;
+    }
+
+    document.getElementById('keywords-tab-btn').style.display = '';
+
+    const totalKw  = pagesWithKw.reduce((s, p) => s + p.ahrefs_keywords.length, 0);
+    const totalTrf = pagesWithKw.reduce((s, p) =>
+      s + p.ahrefs_keywords.reduce((a, k) => a + (k.traffic || 0), 0), 0);
+
+    const sorted = [...pagesWithKw].sort((a, b) => {
+      const ta = a.ahrefs_keywords.reduce((s, k) => s + (k.traffic || 0), 0);
+      const tb = b.ahrefs_keywords.reduce((s, k) => s + (k.traffic || 0), 0);
+      return tb - ta;
+    });
+
+    function posColor(pos) {
+      if (pos <= 3)  return '#059669';
+      if (pos <= 10) return '#0bb4aa';
+      if (pos <= 20) return '#f59e0b';
+      return '#888';
+    }
+
+    const rows = sorted.map(p => {
+      const shortUrl = p.url.replace(/^https?:\/\/[^/]+/, '') || '/';
+      const pageTrf  = p.ahrefs_keywords.reduce((s, k) => s + (k.traffic || 0), 0);
+      const kwRows   = p.ahrefs_keywords.map(k => `
+        <tr style="background:#fafcff">
+          <td style="padding-left:32px;font-size:12px;color:#555">${esc(k.keyword)}</td>
+          <td style="text-align:center;font-weight:700;color:${posColor(k.position)};font-size:12px">#${k.position}</td>
+          <td style="text-align:center;color:#888;font-size:12px">${(k.volume||0).toLocaleString()}</td>
+          <td style="text-align:center;font-weight:600;color:#0bb4aa;font-size:12px">${(k.traffic||0).toLocaleString()}</td>
+          <td></td>
+        </tr>`).join('');
+      return `
+        <tr style="background:#fff">
+          <td style="font-weight:600;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:300px">
+            <a href="${p.url}" target="_blank" style="color:#0bb4aa">${esc(shortUrl)}</a>
+          </td>
+          <td style="text-align:center;color:#888;font-size:12px">${p.ahrefs_keywords.length}</td>
+          <td style="text-align:center;font-weight:600;color:${posColor(p.ahrefs_keywords[0].position)};font-size:12px">
+            #${p.ahrefs_keywords[0].position} — ${esc(p.ahrefs_keywords[0].keyword)}
+          </td>
+          <td style="text-align:center;color:#888;font-size:12px">${(p.ahrefs_keywords[0].volume||0).toLocaleString()}</td>
+          <td style="text-align:center;font-weight:600;color:#0bb4aa;font-size:12px">${pageTrf.toLocaleString()}</td>
+        </tr>
+        ${kwRows}`;
+    }).join('');
+
+    document.getElementById('keywords-content').innerHTML = `
+      <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:20px">
+        <div class="metric-card" style="flex:1;min-width:120px">
+          <div class="metric-val" style="color:#0bb4aa">${pagesWithKw.length}</div>
+          <div class="metric-label">Pages with Rankings</div>
+        </div>
+        <div class="metric-card" style="flex:1;min-width:120px">
+          <div class="metric-val" style="color:#101010">${totalKw}</div>
+          <div class="metric-label">Total Keywords</div>
+        </div>
+        <div class="metric-card" style="flex:1;min-width:120px">
+          <div class="metric-val" style="color:#059669">${totalTrf.toLocaleString()}</div>
+          <div class="metric-label">Est. Monthly Traffic</div>
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead><tr>
+            <th style="min-width:240px">Page</th>
+            <th style="text-align:center">Keywords</th>
+            <th style="min-width:220px">Top Keyword</th>
+            <th style="text-align:center">Volume</th>
+            <th style="text-align:center">Est. Traffic</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      <p style="font-size:11px;color:#aaa;margin-top:10px">Data from Ahrefs. Traffic estimates are monthly. Showing top 10 keywords per page.</p>
+    `;
   }
 
   /* ── Competitor comparison ── */

@@ -16,6 +16,7 @@ import logging
 import os
 import sqlite3
 import threading
+import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -28,7 +29,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI
 from pydantic import BaseModel, HttpUrl
 
-from crawler_engine import crawl_multiple
+from crawler_engine import crawl_multiple, compute_ipr
+from ahrefs_client import fetch_ref_domains, fetch_organic_keywords
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -114,6 +116,7 @@ class CrawlRequest(BaseModel):
     respect_robots:  bool      = True
     use_playwright:  bool      = False
     calculate_ipr:   bool      = False
+    use_ahrefs:      bool      = False
 
 
 class SemanticRequest(BaseModel):
@@ -142,7 +145,8 @@ class JobSummary(BaseModel):
 
 def run_crawl(job_id: str, client_url: str, competitor_urls: list[str],
               max_pages: int, check_externals: bool, respect_robots: bool,
-              use_playwright: bool = False, calculate_ipr: bool = False):
+              use_playwright: bool = False, calculate_ipr: bool = False,
+              use_ahrefs: bool = False):
 
     db_update(job_id, status="running", started_at=datetime.now(timezone.utc).isoformat())
     total_pages = 0
@@ -166,6 +170,32 @@ def run_crawl(job_id: str, client_url: str, competitor_urls: list[str],
 
         # results is already dict[url -> plain dict]
         results_dict = results
+
+        # ── Ahrefs enrichment (client URL only) ─────────────────────────────
+        if use_ahrefs:
+            ahrefs_api_key = os.environ.get("AHREFS_API_KEY", "")
+            if ahrefs_api_key:
+                client_result = results_dict.get(client_url, {})
+                pages = client_result.get("pages", [])
+                external_authority: dict[str, float] = {}
+                logger.info("Ahrefs enrichment: %d pages for %s", len(pages), client_url)
+                for page in pages:
+                    url = page.get("url", "")
+                    if not url:
+                        continue
+                    ref_data = fetch_ref_domains(url, ahrefs_api_key)
+                    kw_data  = fetch_organic_keywords(url, ahrefs_api_key, limit=10)
+                    page["ahrefs_ref_domains_dr10"]  = ref_data["ref_domains_dr10"]
+                    page["ahrefs_ref_domains_total"] = ref_data["ref_domains_total"]
+                    page["ahrefs_keywords"]          = kw_data
+                    external_authority[url] = float(ref_data["ref_domains_dr10"])
+                    time.sleep(0.5)  # stay within Ahrefs rate limits
+                # Re-run IPR with external authority personalisation
+                if calculate_ipr and external_authority:
+                    compute_ipr(client_result, external_authority=external_authority)
+                    logger.info("IPR re-computed with Ahrefs authority for %s", client_url)
+            else:
+                logger.warning("use_ahrefs=True but AHREFS_API_KEY not set — skipping.")
 
         pages_total = sum(
             len(dr.get("pages", [])) for dr in results_dict.values()
@@ -225,7 +255,7 @@ def start_crawl(req: CrawlRequest, background_tasks: BackgroundTasks):
         run_crawl, job_id,
         req.client_url, req.competitor_urls,
         req.max_pages, req.check_externals, req.respect_robots,
-        req.use_playwright, req.calculate_ipr,
+        req.use_playwright, req.calculate_ipr, req.use_ahrefs,
     )
 
     return {"id": job_id, "status": "pending", "created_at": now}

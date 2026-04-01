@@ -125,6 +125,12 @@
             Calculate Internal PageRank (IPR)
           </label>
         </div>
+        <div>
+          <label style="text-transform:none;font-size:12px;font-weight:500;color:#0bb4aa;display:flex;align-items:center;gap:8px;cursor:pointer" title="Fetch referring domains (DR≥10) and keyword rankings from Ahrefs for each page. Boosts IPR for pages with strong backlinks. Requires AHREFS_API_KEY on the server.">
+            <input type="checkbox" id="use-ahrefs" style="width:15px;height:15px;accent-color:#0bb4aa"/>
+            Enrich with Ahrefs data <span style="font-size:10px;font-weight:700;background:#e6fdfb;color:#0bb4aa;border:1px solid #b2ede9;padding:1px 6px;border-radius:4px;margin-left:2px">KEYWORDS + BACKLINKS</span>
+          </label>
+        </div>
       </div>
     </div>
 
@@ -220,6 +226,7 @@
     const respRobots    = document.getElementById('respect-robots').checked;
     const usePlaywright = document.getElementById('use-playwright').checked;
     const calcIPR       = document.getElementById('calculate-ipr').checked;
+    const useAhrefs     = document.getElementById('use-ahrefs').checked;
 
     const btn = document.getElementById('start-btn');
     const msg = document.getElementById('start-msg');
@@ -238,6 +245,7 @@
           respect_robots:   respRobots,
           use_playwright:   usePlaywright,
           calculate_ipr:    calcIPR,
+          use_ahrefs:       useAhrefs,
         })
       });
 
