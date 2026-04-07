@@ -26,27 +26,40 @@ WP_USER = os.environ.get("WP_USER", "")
 WP_PASS = os.environ.get("WP_APP_PASSWORD", "")
 
 
-def _is_configured() -> bool:
-    return bool(WP_URL and WP_USER and WP_PASS)
+def _creds(override: dict | None = None) -> tuple[str, str, str]:
+    """Return (url, user, pass) — use override dict if provided, else env vars."""
+    if override:
+        return (
+            override.get("wp_url", WP_URL).rstrip("/"),
+            override.get("wp_user", WP_USER),
+            override.get("wp_app_password", WP_PASS),
+        )
+    return WP_URL, WP_USER, WP_PASS
 
 
-def debug_auth() -> dict:
+def _is_configured(override: dict | None = None) -> bool:
+    url, user, pw = _creds(override)
+    return bool(url and user and pw)
+
+
+def debug_auth(override: dict | None = None) -> dict:
     """Test WP authentication and return diagnostic info."""
-    if not _is_configured():
-        return {"configured": False, "wp_url": WP_URL, "wp_user": WP_USER, "reason": "missing credentials"}
+    url, user, pw = _creds(override)
+    if not _is_configured(override):
+        return {"configured": False, "wp_url": url, "wp_user": user, "reason": "missing credentials"}
     try:
         r = httpx.get(
-            f"{WP_URL}/wp-json/wp/v2/users/me",
+            f"{url}/wp-json/wp/v2/users/me",
             params={"context": "edit"},
-            headers=_auth_header(),
+            headers=_auth_header(override),
             timeout=15,
         )
         if r.status_code == 200:
             u = r.json()
             return {
                 "auth_ok": True,
-                "wp_url": WP_URL,
-                "wp_user": WP_USER,
+                "wp_url": url,
+                "wp_user": user,
                 "logged_in_as": u.get("name"),
                 "slug": u.get("slug"),
                 "roles": list(u.get("roles", [])),
@@ -54,32 +67,34 @@ def debug_auth() -> dict:
             }
         return {
             "auth_ok": False,
-            "wp_url": WP_URL,
-            "wp_user": WP_USER,
+            "wp_url": url,
+            "wp_user": user,
             "status_code": r.status_code,
             "error": r.json() if r.headers.get("content-type", "").startswith("application/json") else r.text[:300],
         }
     except Exception as e:
-        return {"auth_ok": False, "wp_user": WP_USER, "exception": str(e)}
+        return {"auth_ok": False, "wp_user": user, "exception": str(e)}
 
 
-def _auth_header() -> dict:
-    token = base64.b64encode(f"{WP_USER}:{WP_PASS}".encode()).decode()
+def _auth_header(override: dict | None = None) -> dict:
+    _, user, pw = _creds(override)
+    token = base64.b64encode(f"{user}:{pw}".encode()).decode()
     return {"Authorization": f"Basic {token}", "Content-Type": "application/json"}
 
 
 # ── Post/page lookup ───────────────────────────────────────────────────────────
 
-def _fetch_all_posts(post_type: str = "posts", per_page: int = 100) -> list[dict]:
+def _fetch_all_posts(post_type: str = "posts", per_page: int = 100, override: dict | None = None) -> list[dict]:
     """Fetch all posts of a given type with minimal fields."""
+    url, _, _ = _creds(override)
     items, page = [], 1
     while True:
         try:
             r = httpx.get(
-                f"{WP_URL}/wp-json/wp/v2/{post_type}",
+                f"{url}/wp-json/wp/v2/{post_type}",
                 params={"per_page": per_page, "page": page,
                         "_fields": "id,link,slug,status"},
-                headers=_auth_header(),
+                headers=_auth_header(override),
                 timeout=30,
             )
             if r.status_code == 400:
@@ -96,11 +111,11 @@ def _fetch_all_posts(post_type: str = "posts", per_page: int = 100) -> list[dict
     return items
 
 
-def build_url_map() -> dict[str, dict]:
+def build_url_map(override: dict | None = None) -> dict[str, dict]:
     """Return {path → {id, type}} for all published WP posts and pages."""
     url_map: dict[str, dict] = {}
     for post_type in ("posts", "pages"):
-        for item in _fetch_all_posts(post_type):
+        for item in _fetch_all_posts(post_type, override=override):
             if item.get("status") not in ("publish", "published"):
                 continue
             link = item.get("link", "")
@@ -127,13 +142,14 @@ def find_post_id(target_url: str, url_map: dict) -> tuple[int | None, str | None
 
 # ── Read post content ──────────────────────────────────────────────────────────
 
-def get_post_content(post_id: int, post_type: str = "posts") -> str | None:
+def get_post_content(post_id: int, post_type: str = "posts", override: dict | None = None) -> str | None:
     """Fetch raw post content via WP REST API (needs Gutenberg raw context)."""
+    url, _, _ = _creds(override)
     try:
         r = httpx.get(
-            f"{WP_URL}/wp-json/wp/v2/{post_type}/{post_id}",
+            f"{url}/wp-json/wp/v2/{post_type}/{post_id}",
             params={"context": "edit", "_fields": "id,content,title"},
-            headers=_auth_header(),
+            headers=_auth_header(override),
             timeout=30,
         )
         r.raise_for_status()
@@ -148,14 +164,15 @@ def get_post_content(post_id: int, post_type: str = "posts") -> str | None:
 
 def update_yoast_meta(post_id: int, post_type: str = "posts",
                       title: str | None = None,
-                      meta_desc: str | None = None) -> dict:
+                      meta_desc: str | None = None,
+                      override: dict | None = None) -> dict:
     """
     Update Yoast SEO title and/or meta description for a post.
     Returns {"ok": bool, "status_code": int}.
     """
-    if not _is_configured():
+    if not _is_configured(override):
         return {"ok": False, "reason": "WP credentials not configured"}
-
+    wp_url, _, _ = _creds(override)
     meta = {}
     if title:
         meta["_yoast_wpseo_title"] = title
@@ -166,9 +183,9 @@ def update_yoast_meta(post_id: int, post_type: str = "posts",
 
     try:
         r = httpx.post(
-            f"{WP_URL}/wp-json/wp/v2/{post_type}/{post_id}",
+            f"{wp_url}/wp-json/wp/v2/{post_type}/{post_id}",
             json={"meta": meta},
-            headers=_auth_header(),
+            headers=_auth_header(override),
             timeout=30,
         )
         ok = r.status_code in (200, 201)
@@ -189,17 +206,18 @@ def _already_linked(content: str, target_url: str) -> bool:
 
 
 def inject_internal_link(post_id: int, post_type: str,
-                          anchor_text: str, target_url: str) -> dict:
+                          anchor_text: str, target_url: str,
+                          override: dict | None = None) -> dict:
     """
     Find `anchor_text` in post content and wrap the first occurrence with
     <a href="target_url">anchor_text</a> — only if not already linked.
 
     Returns {"ok": bool, "action": "injected"|"already_linked"|"anchor_not_found"|"error"}.
     """
-    if not _is_configured():
+    if not _is_configured(override):
         return {"ok": False, "action": "error", "reason": "WP credentials not configured"}
-
-    content = get_post_content(post_id, post_type)
+    wp_url, _, _ = _creds(override)
+    content = get_post_content(post_id, post_type, override=override)
     if content is None:
         return {"ok": False, "action": "error", "reason": "could not fetch content"}
 
@@ -221,9 +239,9 @@ def inject_internal_link(post_id: int, post_type: str,
 
     try:
         r = httpx.post(
-            f"{WP_URL}/wp-json/wp/v2/{post_type}/{post_id}",
+            f"{wp_url}/wp-json/wp/v2/{post_type}/{post_id}",
             json={"content": new_content},
-            headers=_auth_header(),
+            headers=_auth_header(override),
             timeout=30,
         )
         ok = r.status_code in (200, 201)
@@ -236,9 +254,10 @@ def inject_internal_link(post_id: int, post_type: str,
 
 # ── Batch action executor ──────────────────────────────────────────────────────
 
-def execute_actions(actions: list[dict]) -> list[dict]:
+def execute_actions(actions: list[dict], override: dict | None = None) -> list[dict]:
     """
     Execute a list of structured actions against WordPress.
+    Pass `override` dict with wp_url/wp_user/wp_app_password for per-site credentials.
 
     Action types:
       {"type": "update_title",       "url": "...", "title": "..."}
@@ -247,11 +266,11 @@ def execute_actions(actions: list[dict]) -> list[dict]:
 
     Returns list of result dicts.
     """
-    if not _is_configured():
+    if not _is_configured(override):
         logger.warning("WP not configured — skipping %d actions", len(actions))
         return [{"action": a, "ok": False, "reason": "WP not configured"} for a in actions]
 
-    url_map = build_url_map()
+    url_map = build_url_map(override)
     results = []
 
     for action in actions:
@@ -267,6 +286,7 @@ def execute_actions(actions: list[dict]) -> list[dict]:
                     pid, ptype or "posts",
                     title    = action.get("title")    if atype == "update_title"     else None,
                     meta_desc= action.get("meta_desc") if atype == "update_meta_desc" else None,
+                    override = override,
                 )
                 results.append({"action": action, **res})
 
@@ -278,7 +298,7 @@ def execute_actions(actions: list[dict]) -> list[dict]:
                 if not pid:
                     results.append({"action": action, "ok": False, "reason": f"source post not found for {source_url}"})
                     continue
-                res = inject_internal_link(pid, ptype or "posts", anchor_text, target_url)
+                res = inject_internal_link(pid, ptype or "posts", anchor_text, target_url, override=override)
                 results.append({"action": action, **res})
 
             else:

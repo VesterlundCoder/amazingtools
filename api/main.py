@@ -97,7 +97,10 @@ def init_db():
                 max_pages       INTEGER NOT NULL DEFAULT 200,
                 calculate_ipr   INTEGER NOT NULL DEFAULT 1,
                 last_run_at     TEXT,
-                next_run_at     TEXT
+                next_run_at     TEXT,
+                wp_url          TEXT,
+                wp_user         TEXT,
+                wp_app_password TEXT
             )
         """))
     for col in ["analysis"]:
@@ -106,6 +109,15 @@ def init_db():
                 stmt = f"ALTER TABLE jobs ADD COLUMN {col} TEXT"
                 if not _IS_SQLITE:
                     stmt = f"ALTER TABLE jobs ADD COLUMN IF NOT EXISTS {col} TEXT"
+                conn.execute(text(stmt))
+        except Exception:
+            pass
+    for col in ["wp_url TEXT", "wp_user TEXT", "wp_app_password TEXT"]:
+        try:
+            with engine.begin() as conn:
+                stmt = f"ALTER TABLE managed_sites ADD COLUMN {col}"
+                if not _IS_SQLITE:
+                    stmt = f"ALTER TABLE managed_sites ADD COLUMN IF NOT EXISTS {col}"
                 conn.execute(text(stmt))
         except Exception:
             pass
@@ -124,11 +136,12 @@ def _seed_managed_sites():
     with engine.begin() as conn:
         for s in sites:
             conn.execute(text("""
-                INSERT INTO managed_sites (url, interval_hours, max_pages, calculate_ipr)
-                VALUES (:url, :ih, :mp, :ipr)
+                INSERT INTO managed_sites (url, interval_hours, max_pages, calculate_ipr, wp_url, wp_user, wp_app_password)
+                VALUES (:url, :ih, :mp, :ipr, :wurl, :wuser, :wpw)
                 ON CONFLICT (url) DO NOTHING
             """), {"url": s["url"], "ih": s.get("interval_hours", 24),
-                   "mp": s.get("max_pages", 200), "ipr": 1 if s.get("calculate_ipr", True) else 0})
+                   "mp": s.get("max_pages", 200), "ipr": 1 if s.get("calculate_ipr", True) else 0,
+                   "wurl": s.get("wp_url"), "wuser": s.get("wp_user"), "wpw": s.get("wp_app_password")})
 
 
 def db_update(job_id: str, **kwargs):
@@ -213,7 +226,8 @@ def run_crawl(job_id: str, client_url: str, competitor_urls: list[str],
               use_ahrefs: bool = False,
               playwright_ua: str = "default", playwright_block_resources: bool = False,
               playwright_scroll: bool = False, playwright_dismiss_modals: bool = False,
-              playwright_auth_cookies: str = ""):
+              playwright_auth_cookies: str = "",
+              wp_creds: dict | None = None):
 
     db_update(job_id, status="running", started_at=datetime.now(timezone.utc).isoformat())
     total_pages = 0
@@ -322,6 +336,7 @@ def run_crawl(job_id: str, client_url: str, competitor_urls: list[str],
             threading.Thread(
                 target=_auto_analyze_and_act,
                 args=(job_id, client_url, results_dict, api_key),
+                kwargs={"wp_creds": wp_creds},
                 daemon=True,
             ).start()
 
@@ -906,7 +921,7 @@ Rules:
 """
 
 
-def _auto_analyze_and_act(job_id: str, client_url: str, results_dict: dict, api_key: str):
+def _auto_analyze_and_act(job_id: str, client_url: str, results_dict: dict, api_key: str, wp_creds: dict | None = None):
     """Run after crawl completes: analyze with GPT, extract actions, apply via WP API, store history."""
     logger.info("[auto-agent] Starting analyze+act for job %s (%s)", job_id, client_url)
     oai = OpenAI(api_key=api_key)
@@ -961,7 +976,7 @@ def _auto_analyze_and_act(job_id: str, client_url: str, results_dict: dict, api_
     action_results: list[dict] = []
     if actions_json:
         try:
-            action_results = wp_agent.execute_actions(actions_json)
+            action_results = wp_agent.execute_actions(actions_json, override=wp_creds)
             ok = sum(1 for r in action_results if r.get("ok"))
             logger.info("[auto-agent] WP actions: %d/%d succeeded", ok, len(action_results))
         except Exception as e:
@@ -992,7 +1007,7 @@ def _auto_analyze_and_act(job_id: str, client_url: str, results_dict: dict, api_
     logger.info("[auto-agent] Done for job %s — history id=%s", job_id, history_id)
 
 
-def _scheduled_crawl(site_url: str, max_pages: int = 200, calculate_ipr: bool = True):
+def _scheduled_crawl(site_url: str, max_pages: int = 200, calculate_ipr: bool = True, wp_creds: dict | None = None):
     """Called by scheduler: create and run a crawl job for a managed site."""
     logger.info("[scheduler] Starting scheduled crawl for %s", site_url)
     job_id = str(uuid.uuid4())[:8]
@@ -1013,7 +1028,7 @@ def _scheduled_crawl(site_url: str, max_pages: int = 200, calculate_ipr: bool = 
             )
     except Exception:
         pass
-    run_crawl(job_id, site_url, [], max_pages, True, True, calculate_ipr=calculate_ipr)
+    run_crawl(job_id, site_url, [], max_pages, True, True, calculate_ipr=calculate_ipr, wp_creds=wp_creds)
 
 
 def _start_scheduler():
@@ -1029,11 +1044,15 @@ def _start_scheduler():
         hours = int(site["interval_hours"] or 24)
         mp    = int(site["max_pages"] or 200)
         ipr   = bool(site["calculate_ipr"])
+        wp_creds = None
+        if site.get("wp_url") or site.get("wp_user"):
+            wp_creds = {"wp_url": site.get("wp_url"), "wp_user": site.get("wp_user"), "wp_app_password": site.get("wp_app_password")}
         _scheduler.add_job(
             _scheduled_crawl,
             trigger="interval",
             hours=hours,
             args=[url, mp, ipr],
+            kwargs={"wp_creds": wp_creds},
             id=f"crawl_{url}",
             replace_existing=True,
             next_run_time=datetime.now(timezone.utc) + timedelta(minutes=2),
@@ -1377,6 +1396,9 @@ class ManagedSiteRequest(BaseModel):
     interval_hours: int  = 24
     max_pages:      int  = 200
     calculate_ipr:  bool = True
+    wp_url:         str | None = None
+    wp_user:        str | None = None
+    wp_app_password: str | None = None
 
 
 @app.get("/api/schedule")
@@ -1390,28 +1412,39 @@ def list_managed_sites():
 def add_managed_site(req: ManagedSiteRequest, background_tasks: BackgroundTasks):
     """Add or update a managed site for periodic automated crawl+analyze+act."""
     now = datetime.now(timezone.utc).isoformat()
+    wp_creds = None
+    if req.wp_url or req.wp_user:
+        wp_creds = {"wp_url": req.wp_url, "wp_user": req.wp_user, "wp_app_password": req.wp_app_password}
     with db_lock:
         with engine.begin() as conn:
             if _IS_SQLITE:
                 conn.execute(text("""
-                    INSERT INTO managed_sites (url, interval_hours, max_pages, calculate_ipr)
-                    VALUES (:url, :ih, :mp, :ipr)
+                    INSERT INTO managed_sites (url, interval_hours, max_pages, calculate_ipr, wp_url, wp_user, wp_app_password)
+                    VALUES (:url, :ih, :mp, :ipr, :wurl, :wuser, :wpw)
                     ON CONFLICT(url) DO UPDATE SET
                         interval_hours=excluded.interval_hours,
                         max_pages=excluded.max_pages,
-                        calculate_ipr=excluded.calculate_ipr
+                        calculate_ipr=excluded.calculate_ipr,
+                        wp_url=excluded.wp_url,
+                        wp_user=excluded.wp_user,
+                        wp_app_password=excluded.wp_app_password
                 """), {"url": req.url, "ih": req.interval_hours,
-                       "mp": req.max_pages, "ipr": 1 if req.calculate_ipr else 0})
+                       "mp": req.max_pages, "ipr": 1 if req.calculate_ipr else 0,
+                       "wurl": req.wp_url, "wuser": req.wp_user, "wpw": req.wp_app_password})
             else:
                 conn.execute(text("""
-                    INSERT INTO managed_sites (url, interval_hours, max_pages, calculate_ipr)
-                    VALUES (:url, :ih, :mp, :ipr)
+                    INSERT INTO managed_sites (url, interval_hours, max_pages, calculate_ipr, wp_url, wp_user, wp_app_password)
+                    VALUES (:url, :ih, :mp, :ipr, :wurl, :wuser, :wpw)
                     ON CONFLICT (url) DO UPDATE SET
                         interval_hours=EXCLUDED.interval_hours,
                         max_pages=EXCLUDED.max_pages,
-                        calculate_ipr=EXCLUDED.calculate_ipr
+                        calculate_ipr=EXCLUDED.calculate_ipr,
+                        wp_url=EXCLUDED.wp_url,
+                        wp_user=EXCLUDED.wp_user,
+                        wp_app_password=EXCLUDED.wp_app_password
                 """), {"url": req.url, "ih": req.interval_hours,
-                       "mp": req.max_pages, "ipr": 1 if req.calculate_ipr else 0})
+                       "mp": req.max_pages, "ipr": 1 if req.calculate_ipr else 0,
+                       "wurl": req.wp_url, "wuser": req.wp_user, "wpw": req.wp_app_password})
 
     # Re-schedule
     _scheduler.add_job(
@@ -1419,6 +1452,7 @@ def add_managed_site(req: ManagedSiteRequest, background_tasks: BackgroundTasks)
         trigger="interval",
         hours=req.interval_hours,
         args=[req.url, req.max_pages, req.calculate_ipr],
+        kwargs={"wp_creds": wp_creds},
         id=f"crawl_{req.url}",
         replace_existing=True,
         next_run_time=datetime.now(timezone.utc) + timedelta(minutes=1),
