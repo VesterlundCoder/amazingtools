@@ -1445,13 +1445,12 @@ def remove_managed_site(site_url: str):
 
 @app.get("/api/wp/status")
 def wp_status():
-    """Check WordPress connectivity."""
-    import os as _os
-    configured = bool(_os.environ.get("WP_URL") and _os.environ.get("WP_USER") and _os.environ.get("WP_APP_PASSWORD"))
-    if not configured:
-        return {"configured": False, "reason": "WP_URL, WP_USER, or WP_APP_PASSWORD not set"}
-    try:
-        url_map = wp_agent.build_url_map()
-        return {"configured": True, "posts_found": len(url_map), "wp_url": _os.environ.get("WP_URL")}
-    except Exception as e:
-        return {"configured": True, "error": str(e)}
+    """Check WordPress connectivity and authentication."""
+    result = wp_agent.debug_auth()
+    if result.get("auth_ok"):
+        try:
+            url_map = wp_agent.build_url_map()
+            result["posts_found"] = len(url_map)
+        except Exception as e:
+            result["posts_error"] = str(e)
+    return result

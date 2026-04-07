@@ -30,6 +30,39 @@ def _is_configured() -> bool:
     return bool(WP_URL and WP_USER and WP_PASS)
 
 
+def debug_auth() -> dict:
+    """Test WP authentication and return diagnostic info."""
+    if not _is_configured():
+        return {"configured": False, "wp_url": WP_URL, "wp_user": WP_USER, "reason": "missing credentials"}
+    try:
+        r = httpx.get(
+            f"{WP_URL}/wp-json/wp/v2/users/me",
+            params={"context": "edit"},
+            headers=_auth_header(),
+            timeout=15,
+        )
+        if r.status_code == 200:
+            u = r.json()
+            return {
+                "auth_ok": True,
+                "wp_url": WP_URL,
+                "wp_user": WP_USER,
+                "logged_in_as": u.get("name"),
+                "slug": u.get("slug"),
+                "roles": list(u.get("roles", [])),
+                "can_edit_posts": u.get("capabilities", {}).get("edit_posts", False),
+            }
+        return {
+            "auth_ok": False,
+            "wp_url": WP_URL,
+            "wp_user": WP_USER,
+            "status_code": r.status_code,
+            "error": r.json() if r.headers.get("content-type", "").startswith("application/json") else r.text[:300],
+        }
+    except Exception as e:
+        return {"auth_ok": False, "wp_user": WP_USER, "exception": str(e)}
+
+
 def _auth_header() -> dict:
     token = base64.b64encode(f"{WP_USER}:{WP_PASS}".encode()).decode()
     return {"Authorization": f"Basic {token}", "Content-Type": "application/json"}
