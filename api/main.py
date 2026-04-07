@@ -870,7 +870,7 @@ def _build_action_prompt(results: dict, client_url: str, analysis: str) -> str:
         for p in pages if p.get("status_code") == 200
     ]
 
-    return f"""You are an SEO automation agent. Given the analysis below and site data, produce a JSON array of WordPress actions to execute NOW.
+    return f"""You are an SEO automation agent. Given the analysis below and site data, produce a JSON object with an "actions" key containing an array of WordPress actions to execute.
 
 Site: {client_url}
 
@@ -889,18 +889,20 @@ Orphaned pages — 0 internal inbound links ({len(orphaned)}):
 All crawled pages (for link targets):
 {json.dumps(all_pages[:30], ensure_ascii=False)}
 
-Output ONLY valid JSON — a list of action objects. Allowed action types:
-  {{"type": "update_title",      "url": "...", "title": "..."}}
-  {{"type": "update_meta_desc",  "url": "...", "meta_desc": "..."}}
+Return a JSON object in this exact format:
+{{"actions": [
+  {{"type": "update_title",      "url": "...", "title": "..."}},
+  {{"type": "update_meta_desc",  "url": "...", "meta_desc": "..."}},
   {{"type": "add_internal_link", "source_url": "...", "anchor_text": "...", "target_url": "..."}}
+]}}
 
 Rules:
-- Write titles as: "Keyword — Site Name" max 60 chars, in the same language as the page
+- Write titles as: "Keyword — Site Name" max 60 chars, in the same language as the page content
 - Write meta descriptions: compelling, 140-155 chars, include target keyword, in same language
-- For internal links: pick natural anchor text that already exists in the source page content
-- Add 2-4 internal links pointing TO each orphaned page from relevant content pages
+- For internal links: pick natural anchor text that plausibly exists in the source page content
+- Add 2-4 internal links pointing TO each orphaned page from topically related content pages
 - Max 40 actions total. Prioritize: meta_desc > title > internal links
-- Output ONLY the JSON array, no markdown, no explanation
+- Output ONLY the JSON object, no markdown code fences, no explanation
 """
 
 
