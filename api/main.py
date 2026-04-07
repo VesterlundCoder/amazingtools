@@ -18,10 +18,11 @@ import threading
 import time
 import uuid
 from contextlib import asynccontextmanager
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timezone, timedelta
 from typing import Optional
 
 import httpx
+from apscheduler.schedulers.background import BackgroundScheduler
 from bs4 import BeautifulSoup
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
@@ -31,6 +32,7 @@ from pydantic import BaseModel, HttpUrl
 from crawler_engine import crawl_multiple, compute_ipr
 from ahrefs_client import fetch_ref_domains, fetch_organic_keywords
 from playwright_analysis import run_playwright_analysis
+import wp_agent
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -77,14 +79,56 @@ def init_db():
                 analysis        TEXT
             )
         """))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS seo_history (
+                id          TEXT PRIMARY KEY,
+                site_url    TEXT NOT NULL,
+                job_id      TEXT NOT NULL,
+                analysis    TEXT,
+                actions     TEXT,
+                metrics     TEXT,
+                created_at  TEXT NOT NULL
+            )
+        """))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS managed_sites (
+                url             TEXT PRIMARY KEY,
+                interval_hours  INTEGER NOT NULL DEFAULT 24,
+                max_pages       INTEGER NOT NULL DEFAULT 200,
+                calculate_ipr   INTEGER NOT NULL DEFAULT 1,
+                last_run_at     TEXT,
+                next_run_at     TEXT
+            )
+        """))
+    for col in ["analysis"]:
+        try:
+            with engine.begin() as conn:
+                stmt = f"ALTER TABLE jobs ADD COLUMN {col} TEXT"
+                if not _IS_SQLITE:
+                    stmt = f"ALTER TABLE jobs ADD COLUMN IF NOT EXISTS {col} TEXT"
+                conn.execute(text(stmt))
+        except Exception:
+            pass
+    _seed_managed_sites()
+
+
+def _seed_managed_sites():
+    """Seed managed sites from MANAGED_SITES env var (JSON array) if table empty."""
+    raw = os.environ.get("MANAGED_SITES", "")
+    if not raw:
+        return
     try:
-        with engine.begin() as conn:
-            if _IS_SQLITE:
-                conn.execute(text("ALTER TABLE jobs ADD COLUMN analysis TEXT"))
-            else:
-                conn.execute(text("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS analysis TEXT"))
+        sites = json.loads(raw)
     except Exception:
-        pass
+        return
+    with engine.begin() as conn:
+        for s in sites:
+            conn.execute(text("""
+                INSERT INTO managed_sites (url, interval_hours, max_pages, calculate_ipr)
+                VALUES (:url, :ih, :mp, :ipr)
+                ON CONFLICT (url) DO NOTHING
+            """), {"url": s["url"], "ih": s.get("interval_hours", 24),
+                   "mp": s.get("max_pages", 200), "ipr": 1 if s.get("calculate_ipr", True) else 0})
 
 
 def db_update(job_id: str, **kwargs):
@@ -97,11 +141,16 @@ def db_update(job_id: str, **kwargs):
 
 # ── App lifespan ──────────────────────────────────────────────────────────────
 
+_scheduler = BackgroundScheduler()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    _start_scheduler()
     logger.info("Amazing Tools SEO Crawler API starting up.")
     yield
+    _scheduler.shutdown(wait=False)
     logger.info("Shutting down.")
 
 
@@ -266,6 +315,15 @@ def run_crawl(job_id: str, client_url: str, competitor_urls: list[str],
             results      = json.dumps(results_dict),
         )
         logger.info(f"Job {job_id} done — {pages_total} pages total.")
+
+        # ── Auto analyze + act ────────────────────────────────────────────
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if api_key:
+            threading.Thread(
+                target=_auto_analyze_and_act,
+                args=(job_id, client_url, results_dict, api_key),
+                daemon=True,
+            ).start()
 
     except Exception as e:
         logger.error(f"Job {job_id} failed: {e}", exc_info=True)
@@ -734,7 +792,257 @@ async def debug_ahrefs(url: str = "https://ahrefs.com"):
 
 # ── AI analysis ───────────────────────────────────────────────────────────────
 
-def _build_prompt(results: dict) -> str:
+def _get_learning_context(site_url: str, limit: int = 3) -> str:
+    """Return a summary of the last N analyses for a site, for use in prompts."""
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(
+                text("SELECT analysis, actions, metrics, created_at FROM seo_history "
+                     "WHERE site_url = :url ORDER BY created_at DESC LIMIT :lim"),
+                {"url": site_url, "lim": limit},
+            ).mappings().fetchall()
+        if not rows:
+            return ""
+        parts = ["## HISTORIK (senaste körningar, för inlärning och trendanalys):\n"]
+        for i, row in enumerate(rows, 1):
+            ts = (row["created_at"] or "")[:10]
+            analysis_snippet = (row["analysis"] or "")[:800]
+            metrics = json.loads(row["metrics"]) if row["metrics"] else {}
+            actions = json.loads(row["actions"]) if row["actions"] else []
+            ok_actions = [a for a in actions if a.get("ok")]
+            parts.append(f"### Körning {i} ({ts}):")
+            if metrics:
+                parts.append(f"  Metrics: sidor={metrics.get('total_pages','?')}, "
+                             f"orphaned={metrics.get('orphaned_pages','?')}, "
+                             f"missing_titles={metrics.get('missing_titles','?')}, "
+                             f"total_links={metrics.get('total_internal_links','?')}")
+            if ok_actions:
+                parts.append(f"  Åtgärder utförda: {len(ok_actions)} st")
+                for a in ok_actions[:5]:
+                    atype = a.get("action", {}).get("type", "?")
+                    aurl  = a.get("action", {}).get("url") or a.get("action", {}).get("source_url", "?")
+                    parts.append(f"    - {atype}: {aurl}")
+            if analysis_snippet:
+                parts.append(f"  Analys-sammanfattning:\n{analysis_snippet}")
+            parts.append("")
+        return "\n".join(parts)
+    except Exception as e:
+        logger.warning("_get_learning_context failed: %s", e)
+        return ""
+
+
+def _extract_metrics(results: dict, client_url: str) -> dict:
+    """Extract key summary metrics from crawl results for a site."""
+    s = results.get(client_url, {}).get("summary", {})
+    return {
+        "total_pages":        s.get("total_pages", 0),
+        "missing_titles":     s.get("missing_titles", 0),
+        "missing_h1":         s.get("missing_h1", 0),
+        "missing_meta_desc":  s.get("missing_meta_desc", 0),
+        "orphaned_pages":     s.get("orphaned_pages", 0),
+        "total_internal_links": s.get("total_internal_links", 0),
+        "broken_links":       s.get("broken_links", 0),
+    }
+
+
+def _build_action_prompt(results: dict, client_url: str, analysis: str) -> str:
+    """Build a prompt asking GPT-4o for a JSON list of concrete WordPress actions."""
+    pages = results.get(client_url, {}).get("pages", [])
+
+    missing_titles = [
+        {"url": p["url"], "h1": p.get("h1") or "", "words": p.get("word_count", 0)}
+        for p in pages if not p.get("title") and p.get("status_code") == 200
+    ][:20]
+
+    missing_meta = [
+        {"url": p["url"], "title": p.get("title") or "", "h1": p.get("h1") or ""}
+        for p in pages if not p.get("meta_description") and p.get("status_code") == 200
+    ][:20]
+
+    orphaned = [
+        {"url": p["url"], "title": p.get("title") or p.get("h1") or "", "words": p.get("word_count", 0)}
+        for p in pages
+        if p.get("ipr_inbound", 0) == 0 and p.get("status_code") == 200 and not p.get("noindex")
+    ][:15]
+
+    all_pages = [
+        {"url": p["url"], "title": p.get("title") or p.get("h1") or p["url"].rstrip("/").split("/")[-1]}
+        for p in pages if p.get("status_code") == 200
+    ]
+
+    return f"""You are an SEO automation agent. Given the analysis below and site data, produce a JSON array of WordPress actions to execute NOW.
+
+Site: {client_url}
+
+Analysis summary:
+{analysis[:1200]}
+
+Pages missing title ({len(missing_titles)}):
+{json.dumps(missing_titles[:10], ensure_ascii=False)}
+
+Pages missing meta description ({len(missing_meta)}):
+{json.dumps(missing_meta[:10], ensure_ascii=False)}
+
+Orphaned pages — 0 internal inbound links ({len(orphaned)}):
+{json.dumps(orphaned[:10], ensure_ascii=False)}
+
+All crawled pages (for link targets):
+{json.dumps(all_pages[:30], ensure_ascii=False)}
+
+Output ONLY valid JSON — a list of action objects. Allowed action types:
+  {{"type": "update_title",      "url": "...", "title": "..."}}
+  {{"type": "update_meta_desc",  "url": "...", "meta_desc": "..."}}
+  {{"type": "add_internal_link", "source_url": "...", "anchor_text": "...", "target_url": "..."}}
+
+Rules:
+- Write titles as: "Keyword — Site Name" max 60 chars, in the same language as the page
+- Write meta descriptions: compelling, 140-155 chars, include target keyword, in same language
+- For internal links: pick natural anchor text that already exists in the source page content
+- Add 2-4 internal links pointing TO each orphaned page from relevant content pages
+- Max 40 actions total. Prioritize: meta_desc > title > internal links
+- Output ONLY the JSON array, no markdown, no explanation
+"""
+
+
+def _auto_analyze_and_act(job_id: str, client_url: str, results_dict: dict, api_key: str):
+    """Run after crawl completes: analyze with GPT, extract actions, apply via WP API, store history."""
+    logger.info("[auto-agent] Starting analyze+act for job %s (%s)", job_id, client_url)
+    oai = OpenAI(api_key=api_key)
+
+    # ── Step 1: build analysis prompt with learning context ──────────────────
+    learning_ctx = _get_learning_context(client_url)
+    prompt = _build_prompt(results_dict, learning_context=learning_ctx)
+
+    try:
+        resp = oai.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "Du är en expert SEO-konsult som ger konkreta, handlingsinriktade råd på svenska."},
+                {"role": "user",   "content": prompt},
+            ],
+            max_tokens=3000,
+            temperature=0.4,
+        )
+        analysis_text = resp.choices[0].message.content.strip()
+        db_update(job_id, analysis=analysis_text)
+        logger.info("[auto-agent] Analysis complete for job %s", job_id)
+    except Exception as e:
+        logger.error("[auto-agent] Analysis failed: %s", e)
+        return
+
+    # ── Step 2: extract structured actions ──────────────────────────────────
+    action_prompt = _build_action_prompt(results_dict, client_url, analysis_text)
+    actions_json: list[dict] = []
+    try:
+        resp2 = oai.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": action_prompt}],
+            max_tokens=4000,
+            temperature=0.2,
+            response_format={"type": "json_object"},
+        )
+        raw = resp2.choices[0].message.content.strip()
+        parsed = json.loads(raw)
+        if isinstance(parsed, list):
+            actions_json = parsed
+        elif isinstance(parsed, dict):
+            # GPT sometimes wraps in {"actions": [...]}
+            for key in ("actions", "items", "results"):
+                if isinstance(parsed.get(key), list):
+                    actions_json = parsed[key]
+                    break
+        logger.info("[auto-agent] Extracted %d actions for job %s", len(actions_json), job_id)
+    except Exception as e:
+        logger.error("[auto-agent] Action extraction failed: %s", e)
+
+    # ── Step 3: apply actions via WordPress API ──────────────────────────────
+    action_results: list[dict] = []
+    if actions_json:
+        try:
+            action_results = wp_agent.execute_actions(actions_json)
+            ok = sum(1 for r in action_results if r.get("ok"))
+            logger.info("[auto-agent] WP actions: %d/%d succeeded", ok, len(action_results))
+        except Exception as e:
+            logger.error("[auto-agent] WP action execution failed: %s", e)
+
+    # ── Step 4: save history ─────────────────────────────────────────────────
+    metrics = _extract_metrics(results_dict, client_url)
+    history_id = str(uuid.uuid4())[:8]
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        with db_lock:
+            with engine.begin() as conn:
+                conn.execute(text("""
+                    INSERT INTO seo_history (id, site_url, job_id, analysis, actions, metrics, created_at)
+                    VALUES (:id, :site, :jid, :analysis, :actions, :metrics, :ts)
+                """), {
+                    "id":       history_id,
+                    "site":     client_url,
+                    "jid":      job_id,
+                    "analysis": analysis_text,
+                    "actions":  json.dumps(action_results),
+                    "metrics":  json.dumps(metrics),
+                    "ts":       now,
+                })
+    except Exception as e:
+        logger.error("[auto-agent] History save failed: %s", e)
+
+    logger.info("[auto-agent] Done for job %s — history id=%s", job_id, history_id)
+
+
+def _scheduled_crawl(site_url: str, max_pages: int = 200, calculate_ipr: bool = True):
+    """Called by scheduler: create and run a crawl job for a managed site."""
+    logger.info("[scheduler] Starting scheduled crawl for %s", site_url)
+    job_id = str(uuid.uuid4())[:8]
+    now    = datetime.now(timezone.utc).isoformat()
+    with db_lock:
+        with engine.begin() as conn:
+            conn.execute(
+                text("INSERT INTO jobs (id, client_url, competitor_urls, status, created_at) "
+                     "VALUES (:id, :cu, :comps, :status, :ts)"),
+                {"id": job_id, "cu": site_url, "comps": "[]", "status": "pending", "ts": now},
+            )
+    # Update last_run_at
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                text("UPDATE managed_sites SET last_run_at=:ts WHERE url=:url"),
+                {"ts": now, "url": site_url}
+            )
+    except Exception:
+        pass
+    run_crawl(job_id, site_url, [], max_pages, True, True, calculate_ipr=calculate_ipr)
+
+
+def _start_scheduler():
+    """Read managed_sites from DB and schedule periodic crawls."""
+    try:
+        with engine.connect() as conn:
+            sites = conn.execute(text("SELECT * FROM managed_sites")).mappings().fetchall()
+    except Exception:
+        return
+
+    for site in sites:
+        url   = site["url"]
+        hours = int(site["interval_hours"] or 24)
+        mp    = int(site["max_pages"] or 200)
+        ipr   = bool(site["calculate_ipr"])
+        _scheduler.add_job(
+            _scheduled_crawl,
+            trigger="interval",
+            hours=hours,
+            args=[url, mp, ipr],
+            id=f"crawl_{url}",
+            replace_existing=True,
+            next_run_time=datetime.now(timezone.utc) + timedelta(minutes=2),
+        )
+        logger.info("[scheduler] Scheduled %s every %dh", url, hours)
+
+    if not _scheduler.running:
+        _scheduler.start()
+
+
+def _build_prompt(results: dict, learning_context: str = "") -> str:
     urls = list(results.keys())
     client_url = urls[0]
     client = results[client_url]
@@ -870,6 +1178,12 @@ def _build_prompt(results: dict) -> str:
             if ci:
                 top_c = max(ci, key=lambda p: p.get("ipr", 0))
                 lines.append(f"- Högsta IPR-sida: {top_c.get('ipr', 0):.3f}  {top_c.get('url','')}")
+
+        lines.append("")
+
+        # ── Learning context ────────────────────────────────────────────────────
+    if learning_context:
+        lines.append(learning_context)
         lines.append("")
 
     lines.append("""
@@ -898,7 +1212,7 @@ Svara i EXAKT detta format (håll dig strikt till rubrikerna, ge konkreta URL-ex
 
 
 @app.post("/api/jobs/{job_id}/analyze")
-def analyze_job(job_id: str):
+def analyze_job(job_id: str, apply_actions: bool = True):
     with engine.connect() as conn:
         row = conn.execute(
             text("SELECT * FROM jobs WHERE id = :id"), {"id": job_id}
@@ -916,23 +1230,32 @@ def analyze_job(job_id: str):
         raise HTTPException(500, detail="OPENAI_API_KEY not configured on server.")
 
     results = json.loads(row["results"])
-    prompt = _build_prompt(results)
+    client_url = row["client_url"]
+
+    if apply_actions:
+        threading.Thread(
+            target=_auto_analyze_and_act,
+            args=(job_id, client_url, results, api_key),
+            daemon=True,
+        ).start()
+        return {"status": "analyzing", "message": "Analysis + actions started in background — check /api/history for results."}
+
+    learning_ctx = _get_learning_context(client_url)
+    prompt = _build_prompt(results, learning_context=learning_ctx)
 
     client = OpenAI(api_key=api_key)
     response = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model="gpt-4o",
         messages=[
             {"role": "system", "content": "Du är en expert SEO-konsult som ger konkreta, handlingsinriktade råd på svenska."},
             {"role": "user",   "content": prompt},
         ],
-        max_tokens=2500,
+        max_tokens=3000,
         temperature=0.4,
     )
 
     analysis_text = response.choices[0].message.content.strip()
-
     db_update(job_id, analysis=analysis_text)
-
     return {"analysis": analysis_text}
 
 
@@ -992,3 +1315,141 @@ def delete_job(job_id: str):
     with engine.begin() as conn:
         conn.execute(text("DELETE FROM jobs WHERE id = :id"), {"id": job_id})
     return None
+
+
+# ── History + actions endpoints ───────────────────────────────────────────────
+
+@app.get("/api/history")
+def get_history(site_url: str = "", limit: int = 20):
+    """Return SEO analysis history, optionally filtered by site."""
+    with engine.connect() as conn:
+        if site_url:
+            rows = conn.execute(
+                text("SELECT id, site_url, job_id, analysis, actions, metrics, created_at "
+                     "FROM seo_history WHERE site_url = :url ORDER BY created_at DESC LIMIT :lim"),
+                {"url": site_url, "lim": limit},
+            ).mappings().fetchall()
+        else:
+            rows = conn.execute(
+                text("SELECT id, site_url, job_id, analysis, actions, metrics, created_at "
+                     "FROM seo_history ORDER BY created_at DESC LIMIT :lim"),
+                {"lim": limit},
+            ).mappings().fetchall()
+    return [
+        {
+            "id":         r["id"],
+            "site_url":   r["site_url"],
+            "job_id":     r["job_id"],
+            "analysis":   r["analysis"],
+            "actions":    json.loads(r["actions"]) if r["actions"] else [],
+            "metrics":    json.loads(r["metrics"]) if r["metrics"] else {},
+            "created_at": r["created_at"],
+        }
+        for r in rows
+    ]
+
+
+@app.get("/api/history/{history_id}")
+def get_history_entry(history_id: str):
+    with engine.connect() as conn:
+        row = conn.execute(
+            text("SELECT * FROM seo_history WHERE id = :id"), {"id": history_id}
+        ).mappings().fetchone()
+    if not row:
+        raise HTTPException(404, detail="History entry not found.")
+    return {
+        "id":         row["id"],
+        "site_url":   row["site_url"],
+        "job_id":     row["job_id"],
+        "analysis":   row["analysis"],
+        "actions":    json.loads(row["actions"]) if row["actions"] else [],
+        "metrics":    json.loads(row["metrics"]) if row["metrics"] else {},
+        "created_at": row["created_at"],
+    }
+
+
+# ── Managed sites (scheduler) endpoints ──────────────────────────────────────
+
+class ManagedSiteRequest(BaseModel):
+    url:            str
+    interval_hours: int  = 24
+    max_pages:      int  = 200
+    calculate_ipr:  bool = True
+
+
+@app.get("/api/schedule")
+def list_managed_sites():
+    with engine.connect() as conn:
+        rows = conn.execute(text("SELECT * FROM managed_sites")).mappings().fetchall()
+    return [dict(r) for r in rows]
+
+
+@app.post("/api/schedule")
+def add_managed_site(req: ManagedSiteRequest, background_tasks: BackgroundTasks):
+    """Add or update a managed site for periodic automated crawl+analyze+act."""
+    now = datetime.now(timezone.utc).isoformat()
+    with db_lock:
+        with engine.begin() as conn:
+            if _IS_SQLITE:
+                conn.execute(text("""
+                    INSERT INTO managed_sites (url, interval_hours, max_pages, calculate_ipr)
+                    VALUES (:url, :ih, :mp, :ipr)
+                    ON CONFLICT(url) DO UPDATE SET
+                        interval_hours=excluded.interval_hours,
+                        max_pages=excluded.max_pages,
+                        calculate_ipr=excluded.calculate_ipr
+                """), {"url": req.url, "ih": req.interval_hours,
+                       "mp": req.max_pages, "ipr": 1 if req.calculate_ipr else 0})
+            else:
+                conn.execute(text("""
+                    INSERT INTO managed_sites (url, interval_hours, max_pages, calculate_ipr)
+                    VALUES (:url, :ih, :mp, :ipr)
+                    ON CONFLICT (url) DO UPDATE SET
+                        interval_hours=EXCLUDED.interval_hours,
+                        max_pages=EXCLUDED.max_pages,
+                        calculate_ipr=EXCLUDED.calculate_ipr
+                """), {"url": req.url, "ih": req.interval_hours,
+                       "mp": req.max_pages, "ipr": 1 if req.calculate_ipr else 0})
+
+    # Re-schedule
+    _scheduler.add_job(
+        _scheduled_crawl,
+        trigger="interval",
+        hours=req.interval_hours,
+        args=[req.url, req.max_pages, req.calculate_ipr],
+        id=f"crawl_{req.url}",
+        replace_existing=True,
+        next_run_time=datetime.now(timezone.utc) + timedelta(minutes=1),
+    )
+    if not _scheduler.running:
+        _scheduler.start()
+
+    return {"status": "scheduled", "url": req.url,
+            "interval_hours": req.interval_hours,
+            "next_run": "~1 minute"}
+
+
+@app.delete("/api/schedule/{site_url:path}", status_code=204)
+def remove_managed_site(site_url: str):
+    with db_lock:
+        with engine.begin() as conn:
+            conn.execute(text("DELETE FROM managed_sites WHERE url = :url"), {"url": site_url})
+    try:
+        _scheduler.remove_job(f"crawl_{site_url}")
+    except Exception:
+        pass
+    return None
+
+
+@app.get("/api/wp/status")
+def wp_status():
+    """Check WordPress connectivity."""
+    import os as _os
+    configured = bool(_os.environ.get("WP_URL") and _os.environ.get("WP_USER") and _os.environ.get("WP_APP_PASSWORD"))
+    if not configured:
+        return {"configured": False, "reason": "WP_URL, WP_USER, or WP_APP_PASSWORD not set"}
+    try:
+        url_map = wp_agent.build_url_map()
+        return {"configured": True, "posts_found": len(url_map), "wp_url": _os.environ.get("WP_URL")}
+    except Exception as e:
+        return {"configured": True, "error": str(e)}
