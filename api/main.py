@@ -34,6 +34,8 @@ from crawler_engine import crawl_multiple, compute_ipr
 from ahrefs_client import fetch_ref_domains, fetch_organic_keywords
 from playwright_analysis import run_playwright_analysis
 import wp_agent
+import gsc_client
+import pagespeed_client
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -119,6 +121,18 @@ def init_db():
                 stmt = f"ALTER TABLE jobs ADD COLUMN {col} TEXT"
                 if not _IS_SQLITE:
                     stmt = f"ALTER TABLE jobs ADD COLUMN IF NOT EXISTS {col} TEXT"
+                conn.execute(text(stmt))
+        except Exception:
+            pass
+    for col in [
+        "gsc_property_url TEXT",
+        "gsc_service_account_json TEXT",
+    ]:
+        try:
+            with engine.begin() as conn:
+                stmt = f"ALTER TABLE managed_sites ADD COLUMN {col}"
+                if not _IS_SQLITE:
+                    stmt = f"ALTER TABLE managed_sites ADD COLUMN IF NOT EXISTS {col}"
                 conn.execute(text(stmt))
         except Exception:
             pass
@@ -237,7 +251,9 @@ def run_crawl(job_id: str, client_url: str, competitor_urls: list[str],
               playwright_ua: str = "default", playwright_block_resources: bool = False,
               playwright_scroll: bool = False, playwright_dismiss_modals: bool = False,
               playwright_auth_cookies: str = "",
-              wp_creds: dict | None = None):
+              wp_creds: dict | None = None,
+              gsc_property: str = "",
+              gsc_sa_json: str = ""):
 
     db_update(job_id, status="running", started_at=datetime.now(timezone.utc).isoformat())
     total_pages = 0
@@ -326,6 +342,40 @@ def run_crawl(job_id: str, client_url: str, competitor_urls: list[str],
                     logger.info("IPR re-computed with Ahrefs authority for %s", client_url)
             else:
                 logger.warning("use_ahrefs=True but AHREFS_API_KEY not set — skipping.")
+
+        # ── GSC enrichment ──────────────────────────────────────────────────
+        gsc_prop = gsc_property or ""
+        if gsc_prop:
+            gsc_data = gsc_client.fetch_gsc_data(
+                site_url=gsc_prop,
+                service_account_json=gsc_sa_json or None,
+            )
+            client_result = results_dict.get(client_url, {})
+            pages = client_result.get("pages", [])
+            gsc_client.merge_gsc_into_pages(pages, gsc_data)
+            logger.info(
+                "GSC enrichment: %d/%d pages matched for %s",
+                sum(1 for p in pages if p.get("gsc_clicks") is not None),
+                len(pages), client_url,
+            )
+
+        # ── PageSpeed / Core Web Vitals enrichment (top 20 pages) ──────────
+        client_result = results_dict.get(client_url, {})
+        pages = client_result.get("pages", [])
+        psi_urls = [
+            p["url"] for p in pages
+            if p.get("status_code") == 200 and not p.get("noindex")
+        ][:20]
+        if psi_urls:
+            psi_data = pagespeed_client.fetch_pagespeed_batch(
+                psi_urls,
+                api_key=os.environ.get("PSI_API_KEY", ""),
+            )
+            pagespeed_client.merge_psi_into_pages(pages, psi_data)
+            logger.info(
+                "PSI enrichment: %d/%d pages measured for %s",
+                len(psi_data), len(psi_urls), client_url,
+            )
 
         pages_total = sum(
             len(dr.get("pages", [])) for dr in results_dict.values()
@@ -1049,11 +1099,31 @@ def _auto_analyze_and_act(job_id: str, client_url: str, results_dict: dict, api_
     logger.info("[auto-agent] Done for job %s — history id=%s", job_id, history_id)
 
 
-def _scheduled_crawl(site_url: str, max_pages: int = 200, calculate_ipr: bool = True, wp_creds: dict | None = None):
+def _scheduled_crawl(
+    site_url: str,
+    max_pages: int = 200,
+    calculate_ipr: bool = True,
+    wp_creds: dict | None = None,
+    gsc_property: str = "",
+    gsc_sa_json: str = "",
+):
     """Called by scheduler: create and run a crawl job for a managed site."""
     logger.info("[scheduler] Starting scheduled crawl for %s", site_url)
     job_id = str(uuid.uuid4())[:8]
     now    = datetime.now(timezone.utc).isoformat()
+    # Load GSC creds from DB if not passed directly (e.g. after server restart)
+    if not gsc_property:
+        try:
+            with engine.connect() as conn:
+                row = conn.execute(
+                    text("SELECT gsc_property_url, gsc_service_account_json FROM managed_sites WHERE url=:url"),
+                    {"url": site_url},
+                ).mappings().fetchone()
+            if row:
+                gsc_property = row["gsc_property_url"] or ""
+                gsc_sa_json  = row["gsc_service_account_json"] or ""
+        except Exception:
+            pass
     with db_lock:
         with engine.begin() as conn:
             conn.execute(
@@ -1061,7 +1131,6 @@ def _scheduled_crawl(site_url: str, max_pages: int = 200, calculate_ipr: bool = 
                      "VALUES (:id, :cu, :comps, :status, :ts)"),
                 {"id": job_id, "cu": site_url, "comps": "[]", "status": "pending", "ts": now},
             )
-    # Update last_run_at
     try:
         with engine.begin() as conn:
             conn.execute(
@@ -1070,7 +1139,11 @@ def _scheduled_crawl(site_url: str, max_pages: int = 200, calculate_ipr: bool = 
             )
     except Exception:
         pass
-    run_crawl(job_id, site_url, [], max_pages, True, True, calculate_ipr=calculate_ipr, wp_creds=wp_creds)
+    run_crawl(
+        job_id, site_url, [], max_pages, True, True,
+        calculate_ipr=calculate_ipr, wp_creds=wp_creds,
+        gsc_property=gsc_property, gsc_sa_json=gsc_sa_json,
+    )
 
 
 def _start_scheduler():
@@ -1216,10 +1289,56 @@ def _build_prompt(results: dict, learning_context: str = "") -> str:
             lines.append(f"  - {p.get('external_links_count')} ext  {p.get('url','')}")
     lines.append("")
 
-    # ── PageSpeed note ───────────────────────────────────────────────────────
-    lines.append("### PageSpeed / Core Web Vitals: EJ INTEGRERAT ÄN")
-    lines.append("  (Google PageSpeed Insights API-integration planeras — LCP, CLS, INP, TTFB kommer)")
-    lines.append("")
+    # ── Google Search Console data ─────────────────────────────────────
+    gsc_pages = [p for p in pages if p.get("gsc_impressions") is not None]
+    if gsc_pages:
+        low_ctr = sorted(
+            [p for p in gsc_pages if (p.get("gsc_impressions") or 0) >= 50],
+            key=lambda p: p.get("gsc_ctr") or 100,
+        )[:8]
+        high_pos = sorted(
+            [p for p in gsc_pages if (p.get("gsc_position") or 99) > 10],
+            key=lambda p: p.get("gsc_impressions") or 0, reverse=True,
+        )[:8]
+        lines.append(f"### Google Search Console (senaste 28 dagarna) — {len(gsc_pages)} sidor med data:")
+        if low_ctr:
+            lines.append("  Låg CTR (hög exponering, låg klickfrekvens) — kandidater för title/meta-optimering:")
+            for p in low_ctr:
+                lines.append(
+                    f"    CTR={p.get('gsc_ctr')}%  pos={p.get('gsc_position')}  "
+                    f"imp={p.get('gsc_impressions')}  klick={p.get('gsc_clicks')}  {p.get('url','')}"
+                )
+        if high_pos:
+            lines.append("  Sidor på position 11-20 (nära första sidan) — prioritera för optimering:")
+            for p in high_pos:
+                lines.append(
+                    f"    pos={p.get('gsc_position')}  imp={p.get('gsc_impressions')}  "
+                    f"CTR={p.get('gsc_ctr')}%  {p.get('url','')}"
+                )
+        lines.append("")
+
+    # ── PageSpeed / Core Web Vitals ──────────────────────────────────────
+    psi_pages = [p for p in pages if p.get("psi_lcp_ms") is not None]
+    if psi_pages:
+        bad_lcp  = [p for p in psi_pages if (p.get("psi_lcp_ms") or 0) > 2500]
+        bad_cls  = [p for p in psi_pages if (p.get("psi_cls") or 0) > 0.1]
+        bad_inp  = [p for p in psi_pages if (p.get("psi_inp_ms") or 0) > 200]
+        avg_score = round(sum(p.get("psi_score", 0) for p in psi_pages) / len(psi_pages))
+        lines.append(f"### Core Web Vitals (PageSpeed Insights, {len(psi_pages)} sidor mätta):")
+        lines.append(f"  Snittpoäng: {avg_score}/100  |  Dålig LCP(>2.5s): {len(bad_lcp)}  "
+                     f"|  Dålig CLS(>0.1): {len(bad_cls)}  |  Dålig INP(>200ms): {len(bad_inp)}")
+        worst = sorted(psi_pages, key=lambda p: p.get("psi_score", 100))[:5]
+        if worst:
+            lines.append("  Sämst presterande sidor:")
+            for p in worst:
+                lines.append(
+                    f"    score={p.get('psi_score')}  LCP={p.get('psi_lcp_ms')}ms  "
+                    f"CLS={p.get('psi_cls')}  INP={p.get('psi_inp_ms')}ms  {p.get('url','')}"
+                )
+        lines.append("")
+    else:
+        lines.append("### Core Web Vitals: mätning ej genomförd (PSI_API_KEY saknas eller inga sidor mätta)")
+        lines.append("")
 
     # ── Competitor summaries ─────────────────────────────────────────────────
     comp_urls = urls[1:]
@@ -1456,13 +1575,15 @@ def get_documentation(site_url: str = "", limit: int = 20):
 # ── Managed sites (scheduler) endpoints ──────────────────────────────────────
 
 class ManagedSiteRequest(BaseModel):
-    url:            str
-    interval_hours: int  = 24
-    max_pages:      int  = 200
-    calculate_ipr:  bool = True
-    wp_url:         str | None = None
-    wp_user:        str | None = None
-    wp_app_password: str | None = None
+    url:                     str
+    interval_hours:          int  = 24
+    max_pages:               int  = 200
+    calculate_ipr:           bool = True
+    wp_url:                  str | None = None
+    wp_user:                 str | None = None
+    wp_app_password:         str | None = None
+    gsc_property_url:        str | None = None
+    gsc_service_account_json: str | None = None
 
 
 @app.get("/api/schedule")
@@ -1481,34 +1602,30 @@ def add_managed_site(req: ManagedSiteRequest, background_tasks: BackgroundTasks)
         wp_creds = {"wp_url": req.wp_url, "wp_user": req.wp_user, "wp_app_password": req.wp_app_password}
     with db_lock:
         with engine.begin() as conn:
+            _params = {
+                "url": req.url, "ih": req.interval_hours,
+                "mp": req.max_pages, "ipr": 1 if req.calculate_ipr else 0,
+                "wurl": req.wp_url, "wuser": req.wp_user, "wpw": req.wp_app_password,
+                "gsc_prop": req.gsc_property_url, "gsc_sa": req.gsc_service_account_json,
+            }
+            _cols = "url,interval_hours,max_pages,calculate_ipr,wp_url,wp_user,wp_app_password,gsc_property_url,gsc_service_account_json"
+            _vals = ":url,:ih,:mp,:ipr,:wurl,:wuser,:wpw,:gsc_prop,:gsc_sa"
+            _set  = ("interval_hours=excluded.interval_hours,max_pages=excluded.max_pages,"
+                     "calculate_ipr=excluded.calculate_ipr,wp_url=excluded.wp_url,"
+                     "wp_user=excluded.wp_user,wp_app_password=excluded.wp_app_password,"
+                     "gsc_property_url=excluded.gsc_property_url,"
+                     "gsc_service_account_json=excluded.gsc_service_account_json")
+            _set_pg = _set.replace("excluded.", "EXCLUDED.")
             if _IS_SQLITE:
-                conn.execute(text("""
-                    INSERT INTO managed_sites (url, interval_hours, max_pages, calculate_ipr, wp_url, wp_user, wp_app_password)
-                    VALUES (:url, :ih, :mp, :ipr, :wurl, :wuser, :wpw)
-                    ON CONFLICT(url) DO UPDATE SET
-                        interval_hours=excluded.interval_hours,
-                        max_pages=excluded.max_pages,
-                        calculate_ipr=excluded.calculate_ipr,
-                        wp_url=excluded.wp_url,
-                        wp_user=excluded.wp_user,
-                        wp_app_password=excluded.wp_app_password
-                """), {"url": req.url, "ih": req.interval_hours,
-                       "mp": req.max_pages, "ipr": 1 if req.calculate_ipr else 0,
-                       "wurl": req.wp_url, "wuser": req.wp_user, "wpw": req.wp_app_password})
+                conn.execute(text(
+                    f"INSERT INTO managed_sites ({_cols}) VALUES ({_vals}) "
+                    f"ON CONFLICT(url) DO UPDATE SET {_set}"
+                ), _params)
             else:
-                conn.execute(text("""
-                    INSERT INTO managed_sites (url, interval_hours, max_pages, calculate_ipr, wp_url, wp_user, wp_app_password)
-                    VALUES (:url, :ih, :mp, :ipr, :wurl, :wuser, :wpw)
-                    ON CONFLICT (url) DO UPDATE SET
-                        interval_hours=EXCLUDED.interval_hours,
-                        max_pages=EXCLUDED.max_pages,
-                        calculate_ipr=EXCLUDED.calculate_ipr,
-                        wp_url=EXCLUDED.wp_url,
-                        wp_user=EXCLUDED.wp_user,
-                        wp_app_password=EXCLUDED.wp_app_password
-                """), {"url": req.url, "ih": req.interval_hours,
-                       "mp": req.max_pages, "ipr": 1 if req.calculate_ipr else 0,
-                       "wurl": req.wp_url, "wuser": req.wp_user, "wpw": req.wp_app_password})
+                conn.execute(text(
+                    f"INSERT INTO managed_sites ({_cols}) VALUES ({_vals}) "
+                    f"ON CONFLICT (url) DO UPDATE SET {_set_pg}"
+                ), _params)
 
     # Re-schedule
     _scheduler.add_job(
@@ -1516,7 +1633,9 @@ def add_managed_site(req: ManagedSiteRequest, background_tasks: BackgroundTasks)
         trigger="interval",
         hours=req.interval_hours,
         args=[req.url, req.max_pages, req.calculate_ipr],
-        kwargs={"wp_creds": wp_creds},
+        kwargs={"wp_creds": wp_creds,
+                "gsc_property": req.gsc_property_url or "",
+                "gsc_sa_json":  req.gsc_service_account_json or ""},
         id=f"crawl_{req.url}",
         replace_existing=True,
         next_run_time=datetime.now(timezone.utc) + timedelta(minutes=1),
