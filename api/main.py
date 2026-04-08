@@ -36,6 +36,10 @@ from playwright_analysis import run_playwright_analysis
 import wp_agent
 import gsc_client
 import pagespeed_client
+import entity_extractor
+import vision_client
+import sub_agents
+import memory_client
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -94,7 +98,25 @@ def init_db():
             )
         """))
         conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS site_documentation (
+            CREATE TABLE IF NOT EXISTS seo_memory (
+            id                  TEXT PRIMARY KEY,
+            site_url            TEXT NOT NULL,
+            page_url            TEXT NOT NULL,
+            action_type         TEXT NOT NULL,
+            action_value        TEXT,
+            context_text        TEXT,
+            context_embedding   TEXT,
+            before_metrics      TEXT,
+            after_metrics       TEXT,
+            reward_score        REAL,
+            job_id              TEXT,
+            action_taken_at     TEXT,
+            reward_computed_at  TEXT
+        )
+    """))
+    with engine.begin() as conn:
+        conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS site_documentation (
                 id          TEXT PRIMARY KEY,
                 site_url    TEXT NOT NULL,
                 job_id      TEXT NOT NULL,
@@ -981,58 +1003,84 @@ Rules:
 """
 
 
-def _auto_analyze_and_act(job_id: str, client_url: str, results_dict: dict, api_key: str, wp_creds: dict | None = None):
-    """Run after crawl completes: analyze with GPT, extract actions, apply via WP API, store history."""
-    logger.info("[auto-agent] Starting analyze+act for job %s (%s)", job_id, client_url)
-    oai = OpenAI(api_key=api_key)
-
-    # ── Step 1: build analysis prompt with learning context ──────────────────
-    learning_ctx = _get_learning_context(client_url)
-    prompt = _build_prompt(results_dict, learning_context=learning_ctx)
-
-    try:
-        resp = oai.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "Du är en expert SEO-konsult som ger konkreta, handlingsinriktade råd på svenska."},
-                {"role": "user",   "content": prompt},
-            ],
-            max_tokens=3000,
-            temperature=0.4,
-        )
-        analysis_text = resp.choices[0].message.content.strip()
-        db_update(job_id, analysis=analysis_text)
-        logger.info("[auto-agent] Analysis complete for job %s", job_id)
-    except Exception as e:
-        logger.error("[auto-agent] Analysis failed: %s", e)
+def _reward_cron_job():
+    """Weekly cron: compute reward scores for past SEO actions using fresh GSC data."""
+    logger.info("[reward-cron] Starting weekly reward computation")
+    api_key = os.environ.get("OPENAI_API_KEY", "")
+    if not api_key:
+        logger.warning("[reward-cron] OPENAI_API_KEY not set — skipping")
         return
+    memory_client.run_reward_cron(engine, db_lock, api_key)
 
-    # ── Step 2: extract structured actions ──────────────────────────────────
-    action_prompt = _build_action_prompt(results_dict, client_url, analysis_text)
+
+def _auto_analyze_and_act(job_id: str, client_url: str, results_dict: dict, api_key: str, wp_creds: dict | None = None):
+    """Run after crawl: sub-agent analysis, action extraction, WP execution, memory + history."""
+    logger.info("[auto-agent] Starting for job %s (%s)", job_id, client_url)
+    oai          = OpenAI(api_key=api_key)
+    client_data  = results_dict.get(client_url, {})
+    pages        = client_data.get("pages", [])
+    metrics      = _extract_metrics(results_dict, client_url)
+    now          = datetime.now(timezone.utc).isoformat()
+
+    # ── Phase 2a: Entity extraction ────────────────────────────────────
+    try:
+        entity_extractor.extract_entities_for_pages(pages, api_key)
+        logger.info("[auto-agent] Entities done for job %s", job_id)
+    except Exception as e:
+        logger.warning("[auto-agent] Entity extraction failed: %s", e)
+
+    # ── Phase 2b: Vision alt-text actions ────────────────────────────
+    vision_actions: list[dict] = []
+    try:
+        vision_actions = vision_client.generate_alt_texts_for_job(pages, api_key)
+        logger.info("[auto-agent] Vision: %d alt-text actions", len(vision_actions))
+    except Exception as e:
+        logger.warning("[auto-agent] Vision alt-text failed: %s", e)
+
+    # ── Phase 4: Retrieve similar past memories for learning context ───────
+    memory_context = ""
+    try:
+        ctx_summary = (
+            f"site:{client_url}  pages:{metrics.get('total_pages',0)}  "
+            f"4xx:{metrics.get('pages_4xx',0)}  missing_titles:{metrics.get('missing_titles',0)}"
+        )
+        memories = memory_client.retrieve_similar(
+            engine, ctx_summary, api_key, limit=5
+        )
+        memory_context = memory_client.build_memory_prompt(memories)
+    except Exception as e:
+        logger.warning("[auto-agent] Memory retrieval failed: %s", e)
+
+    # ── Phase 3a: Tech SEO Agent ────────────────────────────────────────
+    tech_text = ""
+    try:
+        tech_text = sub_agents.run_tech_seo_agent(pages, metrics, client_url, oai)
+    except Exception as e:
+        logger.error("[auto-agent] Tech agent failed: %s", e)
+
+    # ── Phase 3b: Content SEO Agent ──────────────────────────────────
+    content_actions: list[dict] = []
+    try:
+        content_actions = sub_agents.run_content_seo_agent(
+            pages, client_url, oai, memory_context=memory_context
+        )
+    except Exception as e:
+        logger.error("[auto-agent] Content agent failed: %s", e)
+
+    # ── Phase 3c: Master Agent ─────────────────────────────────────────
+    analysis_text  = tech_text
     actions_json: list[dict] = []
     try:
-        resp2 = oai.chat.completions.create(
-            model="gpt-4o",
-            messages=[{"role": "user", "content": action_prompt}],
-            max_tokens=4000,
-            temperature=0.2,
-            response_format={"type": "json_object"},
+        analysis_text, actions_json = sub_agents.run_master_agent(
+            tech_text, content_actions, vision_actions, client_url, oai
         )
-        raw = resp2.choices[0].message.content.strip()
-        parsed = json.loads(raw)
-        if isinstance(parsed, list):
-            actions_json = parsed
-        elif isinstance(parsed, dict):
-            # GPT sometimes wraps in {"actions": [...]}
-            for key in ("actions", "items", "results"):
-                if isinstance(parsed.get(key), list):
-                    actions_json = parsed[key]
-                    break
-        logger.info("[auto-agent] Extracted %d actions for job %s", len(actions_json), job_id)
+        db_update(job_id, analysis=analysis_text)
+        logger.info("[auto-agent] Master agent: %d final actions", len(actions_json))
     except Exception as e:
-        logger.error("[auto-agent] Action extraction failed: %s", e)
+        logger.error("[auto-agent] Master agent failed: %s", e)
+        db_update(job_id, analysis=analysis_text)
 
-    # ── Step 3: apply actions via WordPress API ──────────────────────────────
+    # ── Execute actions via WordPress API ─────────────────────────────
     action_results: list[dict] = []
     if actions_json:
         try:
@@ -1041,6 +1089,33 @@ def _auto_analyze_and_act(job_id: str, client_url: str, results_dict: dict, api_
             logger.info("[auto-agent] WP actions: %d/%d succeeded", ok, len(action_results))
         except Exception as e:
             logger.error("[auto-agent] WP action execution failed: %s", e)
+
+    # ── Phase 4: Store successful actions in memory ──────────────────────
+    try:
+        for act, result in zip(actions_json, action_results):
+            if not result.get("ok"):
+                continue
+            p_url  = act.get("url") or act.get("page_url", "")
+            page_d = next((p for p in pages if p.get("url") == p_url), {})
+            before = {
+                "gsc_ctr":         page_d.get("gsc_ctr"),
+                "gsc_position":    page_d.get("gsc_position"),
+                "gsc_impressions": page_d.get("gsc_impressions"),
+            }
+            ctx = (
+                f"site:{client_url}  page:{p_url}  "
+                f"entities:{page_d.get('entities', [])[:5]}  "
+                f"words:{page_d.get('word_count',0)}"
+            )
+            atype = act.get("type") or act.get("action", "")
+            aval  = act.get("title") or act.get("meta_desc") or act.get("new_value") or act.get("alt_text", "")
+            memory_client.store_action(engine, db_lock,
+                site_url=client_url, page_url=p_url,
+                action_type=atype, action_value=aval,
+                context_text=ctx, before_metrics=before,
+                api_key=api_key, job_id=job_id)
+    except Exception as e:
+        logger.warning("[auto-agent] Memory store failed: %s", e)
 
     # ── Step 4: save history ─────────────────────────────────────────────────
     metrics = _extract_metrics(results_dict, client_url)
@@ -1167,12 +1242,27 @@ def _start_scheduler():
             trigger="interval",
             hours=hours,
             args=[url, mp, ipr],
-            kwargs={"wp_creds": wp_creds},
+            kwargs={
+                "wp_creds":    wp_creds,
+                "gsc_property": site.get("gsc_property_url") or "",
+                "gsc_sa_json":  site.get("gsc_service_account_json") or "",
+            },
             id=f"crawl_{url}",
             replace_existing=True,
             next_run_time=datetime.now(timezone.utc) + timedelta(minutes=2),
         )
         logger.info("[scheduler] Scheduled %s every %dh", url, hours)
+
+    # Weekly reward cron (Phase 4)
+    _scheduler.add_job(
+        _reward_cron_job,
+        trigger="interval",
+        hours=168,
+        id="reward_cron",
+        replace_existing=True,
+        next_run_time=datetime.now(timezone.utc) + timedelta(hours=24),
+    )
+    logger.info("[scheduler] Reward cron scheduled (weekly)")
 
     if not _scheduler.running:
         _scheduler.start()
@@ -1499,7 +1589,49 @@ def delete_job(job_id: str):
     return None
 
 
-# ── History + actions endpoints ───────────────────────────────────────────────
+# ── Memory endpoints (Phase 4) ────────────────────────────────────────────────────
+
+@app.get("/api/memory")
+def get_memory(
+    site_url: str = "",
+    action_type: str = "",
+    min_reward: float = -999,
+    limit: int = 50,
+):
+    """Browse the SEO action memory store. Filter by site, action type, or min reward score."""
+    with engine.connect() as conn:
+        rows = conn.execute(text("""
+            SELECT id, site_url, page_url, action_type, action_value,
+                   context_text, reward_score, before_metrics, after_metrics,
+                   job_id, action_taken_at, reward_computed_at
+            FROM seo_memory
+            WHERE (:site = '' OR site_url = :site)
+              AND (:atype = '' OR action_type = :atype)
+              AND (reward_score IS NULL OR reward_score >= :minr)
+            ORDER BY action_taken_at DESC
+            LIMIT :lim
+        """), {"site": site_url, "atype": action_type,
+               "minr": min_reward, "lim": limit}).mappings().fetchall()
+    return [
+        {
+            "id":                r["id"],
+            "site_url":          r["site_url"],
+            "page_url":          r["page_url"],
+            "action_type":       r["action_type"],
+            "action_value":      r["action_value"],
+            "context_text":      r["context_text"],
+            "reward_score":      r["reward_score"],
+            "before_metrics":    json.loads(r["before_metrics"]) if r["before_metrics"] else {},
+            "after_metrics":     json.loads(r["after_metrics"])  if r["after_metrics"]  else None,
+            "job_id":            r["job_id"],
+            "action_taken_at":   r["action_taken_at"],
+            "reward_computed_at": r["reward_computed_at"],
+        }
+        for r in rows
+    ]
+
+
+# ── History + actions endpoints ─────────────────────────────────────────────────────
 
 @app.get("/api/history")
 def get_history(site_url: str = "", limit: int = 20):

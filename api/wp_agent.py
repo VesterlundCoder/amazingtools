@@ -252,6 +252,57 @@ def inject_internal_link(post_id: int, post_type: str,
         return {"ok": False, "action": "error", "reason": str(e)}
 
 
+# ── Image alt-text update ─────────────────────────────────────────────────────
+
+def update_image_alt(image_url: str, alt_text: str, override: dict | None = None) -> dict:
+    """
+    Find a WordPress media attachment by its source URL and update its alt text.
+    Uses WP REST API: GET /wp/v2/media?search=<filename> → POST /wp/v2/media/<id>
+    Returns {"ok": bool, ...}.
+    """
+    if not _is_configured(override):
+        return {"ok": False, "reason": "WP credentials not configured"}
+
+    wp_url, _, _ = _creds(override)
+    filename = image_url.rstrip("/").split("/")[-1].split("?")[0]
+
+    try:
+        r = httpx.get(
+            f"{wp_url}/wp-json/wp/v2/media",
+            params={"search": filename, "per_page": 10, "_fields": "id,source_url"},
+            headers=_auth_header(override),
+            timeout=20,
+        )
+        r.raise_for_status()
+        media = r.json()
+    except Exception as e:
+        return {"ok": False, "reason": f"media search failed: {e}"}
+
+    # Find exact match on source_url
+    attachment_id = None
+    for m in media:
+        if image_url in m.get("source_url", "") or filename in m.get("source_url", ""):
+            attachment_id = m["id"]
+            break
+
+    if not attachment_id:
+        return {"ok": False, "reason": f"attachment not found for {filename}"}
+
+    try:
+        r2 = httpx.post(
+            f"{wp_url}/wp-json/wp/v2/media/{attachment_id}",
+            json={"alt_text": alt_text},
+            headers=_auth_header(override),
+            timeout=20,
+        )
+        ok = r2.status_code in (200, 201)
+        if not ok:
+            logger.warning("update_image_alt %d failed %d", attachment_id, r2.status_code)
+        return {"ok": ok, "status_code": r2.status_code, "attachment_id": attachment_id}
+    except Exception as e:
+        return {"ok": False, "reason": str(e)}
+
+
 # ── Batch action executor ──────────────────────────────────────────────────────
 
 def execute_actions(actions: list[dict], override: dict | None = None) -> list[dict]:
@@ -259,10 +310,11 @@ def execute_actions(actions: list[dict], override: dict | None = None) -> list[d
     Execute a list of structured actions against WordPress.
     Pass `override` dict with wp_url/wp_user/wp_app_password for per-site credentials.
 
-    Action types:
-      {"type": "update_title",       "url": "...", "title": "..."}
-      {"type": "update_meta_desc",   "url": "...", "meta_desc": "..."}
-      {"type": "add_internal_link",  "source_url": "...", "anchor_text": "...", "target_url": "..."}
+    Supported action types ("type" or "action" key accepted):
+      update_title       — {"url"|"page_url": "...", "title"|"new_value": "..."}
+      update_meta_desc   — {"url"|"page_url": "...", "meta_desc"|"new_value": "..."}
+      add_internal_link  — {"source_url": "...", "anchor_text": "...", "target_url": "..."}
+      add_image_alt      — {"image_url": "...", "alt_text": "..."}
 
     Returns list of result dicts.
     """
@@ -274,35 +326,52 @@ def execute_actions(actions: list[dict], override: dict | None = None) -> list[d
     results = []
 
     for action in actions:
-        atype = action.get("type", "")
+        # Accept both "type" and "action" as the discriminator key
+        atype = action.get("type") or action.get("action", "")
+        # Accept both "url" and "page_url"
+        page_url = action.get("url") or action.get("page_url", "")
         try:
             if atype in ("update_title", "update_meta_desc"):
-                url = action.get("url", "")
-                pid, ptype = find_post_id(url, url_map)
+                pid, ptype = find_post_id(page_url, url_map)
                 if not pid:
-                    results.append({"action": action, "ok": False, "reason": f"post not found for {url}"})
+                    results.append({"action": action, "ok": False,
+                                    "reason": f"post not found for {page_url}"})
                     continue
+                # Accept "title"/"meta_desc" or generic "new_value"
+                title     = action.get("title")     or (action.get("new_value") if atype == "update_title"     else None)
+                meta_desc = action.get("meta_desc") or (action.get("new_value") if atype == "update_meta_desc" else None)
                 res = update_yoast_meta(
                     pid, ptype or "posts",
-                    title    = action.get("title")    if atype == "update_title"     else None,
-                    meta_desc= action.get("meta_desc") if atype == "update_meta_desc" else None,
-                    override = override,
+                    title=title, meta_desc=meta_desc, override=override,
                 )
                 results.append({"action": action, **res})
 
             elif atype == "add_internal_link":
-                source_url  = action.get("source_url", "")
+                source_url  = action.get("source_url", page_url)
                 anchor_text = action.get("anchor_text", "")
                 target_url  = action.get("target_url", "")
-                pid, ptype = find_post_id(source_url, url_map)
+                pid, ptype  = find_post_id(source_url, url_map)
                 if not pid:
-                    results.append({"action": action, "ok": False, "reason": f"source post not found for {source_url}"})
+                    results.append({"action": action, "ok": False,
+                                    "reason": f"source post not found for {source_url}"})
                     continue
-                res = inject_internal_link(pid, ptype or "posts", anchor_text, target_url, override=override)
+                res = inject_internal_link(pid, ptype or "posts",
+                                           anchor_text, target_url, override=override)
+                results.append({"action": action, **res})
+
+            elif atype == "add_image_alt":
+                image_url = action.get("image_url", "")
+                alt_text  = action.get("alt_text", "")
+                if not image_url or not alt_text:
+                    results.append({"action": action, "ok": False,
+                                    "reason": "image_url and alt_text required"})
+                    continue
+                res = update_image_alt(image_url, alt_text, override=override)
                 results.append({"action": action, **res})
 
             else:
-                results.append({"action": action, "ok": False, "reason": f"unknown action type: {atype}"})
+                results.append({"action": action, "ok": False,
+                                 "reason": f"unknown action type: {atype}"})
 
         except Exception as e:
             logger.error("execute_action %s error: %s", atype, e, exc_info=True)
