@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 main.py — Amazing Tools SEO Crawler API (FastAPI + SQLite).
 
@@ -87,6 +88,15 @@ def init_db():
                 analysis    TEXT,
                 actions     TEXT,
                 metrics     TEXT,
+                created_at  TEXT NOT NULL
+            )
+        """))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS site_documentation (
+                id          TEXT PRIMARY KEY,
+                site_url    TEXT NOT NULL,
+                job_id      TEXT NOT NULL,
+                doc_md      TEXT NOT NULL,
                 created_at  TEXT NOT NULL
             )
         """))
@@ -1004,6 +1014,38 @@ def _auto_analyze_and_act(job_id: str, client_url: str, results_dict: dict, api_
     except Exception as e:
         logger.error("[auto-agent] History save failed: %s", e)
 
+    # ── Step 5: generate and save site documentation ──────────────────────
+    try:
+        ok_actions = [r for r in action_results if r.get("ok")]
+        doc_prompt = (
+            f"Write a short markdown documentation (max 300 words, bullet points) summarising "
+            f"what was done on {client_url} in this SEO agent run.\n"
+            f"Include: date ({now[:10]}), pages crawled ({metrics.get('total_pages',0)}), "
+            f"key issues found (missing titles: {metrics.get('missing_titles',0)}, "
+            f"missing meta: {metrics.get('missing_meta_desc',0)}, "
+            f"orphaned pages: {metrics.get('orphaned_pages',0)}, "
+            f"broken links: {metrics.get('broken_links',0)}), "
+            f"actions applied ({len(ok_actions)} of {len(action_results)} succeeded).\n"
+            f"Analysis summary (first 600 chars):\n{analysis_text[:600]}"
+        )
+        doc_resp = oai.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": doc_prompt}],
+            max_tokens=500,
+            temperature=0.3,
+        )
+        doc_md = doc_resp.choices[0].message.content.strip()
+        doc_id = str(uuid.uuid4())[:8]
+        with db_lock:
+            with engine.begin() as conn:
+                conn.execute(text("""
+                    INSERT INTO site_documentation (id, site_url, job_id, doc_md, created_at)
+                    VALUES (:id, :site, :jid, :doc, :ts)
+                """), {"id": doc_id, "site": client_url, "jid": job_id, "doc": doc_md, "ts": now})
+        logger.info("[auto-agent] Site doc saved id=%s for job %s", doc_id, job_id)
+    except Exception as e:
+        logger.error("[auto-agent] Site doc generation failed: %s", e)
+
     logger.info("[auto-agent] Done for job %s — history id=%s", job_id, history_id)
 
 
@@ -1387,6 +1429,28 @@ def get_history_entry(history_id: str):
         "metrics":    json.loads(row["metrics"]) if row["metrics"] else {},
         "created_at": row["created_at"],
     }
+
+
+# ── Site documentation endpoints ────────────────────────────────────────────
+
+@app.get("/api/documentation")
+def get_documentation(site_url: str = "", limit: int = 20):
+    """Return generated run-documentation for a site (or all sites)."""
+    with engine.connect() as conn:
+        if site_url:
+            rows = conn.execute(
+                text("SELECT id, site_url, job_id, doc_md, created_at "
+                     "FROM site_documentation WHERE site_url = :url ORDER BY created_at DESC LIMIT :lim"),
+                {"url": site_url, "lim": limit},
+            ).mappings().fetchall()
+        else:
+            rows = conn.execute(
+                text("SELECT id, site_url, job_id, doc_md, created_at "
+                     "FROM site_documentation ORDER BY created_at DESC LIMIT :lim"),
+                {"lim": limit},
+            ).mappings().fetchall()
+    return [{"id": r["id"], "site_url": r["site_url"], "job_id": r["job_id"],
+             "doc_md": r["doc_md"], "created_at": r["created_at"]} for r in rows]
 
 
 # ── Managed sites (scheduler) endpoints ──────────────────────────────────────
