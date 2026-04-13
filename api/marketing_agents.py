@@ -84,7 +84,7 @@ def _ddg_search(query: str, n: int = 5) -> str:
 def _gpt(system: str, user: str, max_tokens: int = 2000, json_mode: bool = True) -> dict | str:
     oai = _oai()
     kwargs = dict(
-        model="gpt-4o",
+        model="gpt-4o-mini",
         messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
         max_tokens=max_tokens,
         temperature=0.3,
@@ -614,7 +614,131 @@ class ConversionAgent:
             return {"error": str(e), "is_dummy": False}
 
 
-# ── Registry ───────────────────────────────────────────────────────────────────
+# ── Agent 8: SEO Project Launcher ─────────────────────────────────────────
+
+class SeoProjectAgent:
+    AGENT_ID     = "seo-project"
+    DISPLAY_NAME = "WestMath SEO Agent"
+    ICON         = "🌐"
+    DESCRIPTION  = "Register a WordPress site with the WestMath SEO agent on Railway. It will audit, plan content, write pages, and optimise your site automatically."
+    INPUTS = [
+        {"key": "site_url",   "label": "WordPress Site URL",                         "placeholder": "https://yourclient.com",           "type": "url"},
+        {"key": "wp_user",    "label": "WP Admin Username",                          "placeholder": "admin",                            "type": "text"},
+        {"key": "wp_password","label": "WP Application Password",                    "placeholder": "xxxx xxxx xxxx xxxx xxxx",         "type": "text"},
+        {"key": "site_name",  "label": "Display Name",                               "placeholder": "Client Brand Name",                "type": "text"},
+        {"key": "keywords",   "label": "Target Keywords (optional, comma-separated)","placeholder": "link building service, SEO agency","type": "text"},
+    ]
+    DUMMY = {
+        "status": "registered", "site_id": "demo_client", "site_name": "Demo Client",
+        "site_url": "https://democlient.com", "is_dummy": True,
+        "message": "Site registered. Phase 0 (WP credential check) will run on next agent cycle.",
+        "phases_queued": ["0: Verify WP credentials", "1: Keyword research (Ahrefs)",
+                          "2: Content planning", "3: Write + publish pages",
+                          "4: Internal linking", "5: Rank monitoring"],
+        "note": "Real mode POSTs credentials to SEOAGENT_URL/projects on Railway.",
+    }
+
+    @staticmethod
+    def run(input_data: dict, use_dummy: bool = False) -> dict:
+        if use_dummy:
+            return SeoProjectAgent.DUMMY
+        site_url  = input_data.get("site_url", "").rstrip("/")
+        wp_user   = input_data.get("wp_user", "")
+        wp_pass   = input_data.get("wp_password", "")
+        site_name = input_data.get("site_name", "") or site_url.split("//")[-1].split("/")[0]
+        keywords  = [k.strip() for k in input_data.get("keywords", "").split(",") if k.strip()]
+        seo_url   = os.environ.get("SEOAGENT_URL", "").rstrip("/")
+        if not seo_url:
+            return {"error": "SEOAGENT_URL env var not set. Add it under Railway Variables.", "is_dummy": False}
+        payload = {"site_url": site_url, "wp_user": wp_user, "wp_password": wp_pass,
+                   "site_name": site_name, "target_keywords": keywords}
+        try:
+            with httpx.Client(timeout=15) as c:
+                r = c.post(f"{seo_url}/projects", json=payload)
+                r.raise_for_status()
+                result = r.json()
+                result["is_dummy"] = False
+                return result
+        except Exception as e:
+            return {"error": str(e), "is_dummy": False}
+
+
+# ── Agent 9: AI Visibility Tracker ─────────────────────────────────────────
+
+class AIVAgent:
+    AGENT_ID     = "aiv"
+    DISPLAY_NAME = "AI Visibility Tracker"
+    ICON         = "📡"
+    DESCRIPTION  = "Measure how visible your brand is when AI (ChatGPT) answers questions in your market. Computes mention rate and Share of Voice vs competitors."
+    INPUTS = [
+        {"key": "client_name",      "label": "Client Brand Name",                            "placeholder": "Amazing Group AB",          "type": "text"},
+        {"key": "client_url",       "label": "Client URL",                                    "placeholder": "https://amazinggroup.se",    "type": "url"},
+        {"key": "personas",         "label": "Target Personas (comma-separated, max 3)",     "placeholder": "HR-chefer,CFO,VD",          "type": "text"},
+        {"key": "services",         "label": "Services (comma-separated, max 3)",            "placeholder": "Rekrytering,Bemanning",      "type": "text"},
+        {"key": "regions",          "label": "Regions (comma-separated)",                    "placeholder": "Stockholm,Sweden",           "type": "text"},
+        {"key": "competitor_names", "label": "Competitor Names (optional, comma-separated)", "placeholder": "Competitor A,Competitor B",  "type": "text"},
+        {"key": "competitor_urls",  "label": "Competitor URLs (optional, comma-separated)",  "placeholder": "https://a.se,https://b.se", "type": "text"},
+        {"key": "num_prompts",      "label": "Prompts per persona (5–30, more = slower)",     "placeholder": "10",                         "type": "text"},
+    ]
+    DUMMY = {
+        "client": "Amazing Group AB", "run_id": "amazing_group_ab_20260413", "is_dummy": True,
+        "summary": {"total_prompts": 30, "client_mention_rate": 0.43, "client_sov_mentions": 0.38, "avg_response_length": 284},
+        "brands": [
+            {"name": "Amazing Group AB", "type": "client",     "mention_rate": 0.43, "sov_mentions": 0.38, "prompts_with_mentions": 13},
+            {"name": "Adecco",           "type": "competitor", "mention_rate": 0.67, "sov_mentions": 0.58, "prompts_with_mentions": 20},
+            {"name": "Manpower",         "type": "competitor", "mention_rate": 0.50, "sov_mentions": 0.43, "prompts_with_mentions": 15},
+        ],
+        "by_persona": [
+            {"persona": "HR-chefer",    "mention_rate": 0.50, "prompts": 10},
+            {"persona": "CFO",          "mention_rate": 0.40, "prompts": 10},
+            {"persona": "Inköpschefer", "mention_rate": 0.40, "prompts": 10},
+        ],
+        "by_service": [
+            {"service": "Rekrytering", "mention_rate": 0.47},
+            {"service": "Bemanning",   "mention_rate": 0.40},
+        ],
+        "visibility_gaps": [
+            "Low visibility for CFO persona when asking about 'kostnadseffektiv rekrytering'",
+            "Adecco dominates 'bemanningsföretag Stockholm' queries — no Amazing Group mentions",
+            "Service 'Bemanning' has 7% lower mention rate than 'Rekrytering' — content gap",
+        ],
+        "sample_responses": [
+            {"prompt": "Vilket bemanningsföretag passar bäst för HR-chefer i Stockholm?",
+             "answer": "För HR-chefer i Stockholm är Adecco och Manpower större alternativen, men Amazing Group AB erbjuder specialiserad rekrytering för B2B-företag...",
+             "mentions_client": True},
+            {"prompt": "Vilket företag kan hjälpa oss med bemanning på kort varsel?",
+             "answer": "Adecco och Manpower har bredast täckning för snabb bemanning...",
+             "mentions_client": False},
+        ],
+    }
+
+    @staticmethod
+    def run(input_data: dict, use_dummy: bool = False) -> dict:
+        if use_dummy:
+            return AIVAgent.DUMMY
+        from aiv_pipeline import run_aiv_pipeline
+        client_name  = input_data.get("client_name", "")
+        client_url   = input_data.get("client_url", "")
+        personas     = [p.strip() for p in input_data.get("personas", "").split(",") if p.strip()][:3]
+        services     = [s.strip() for s in input_data.get("services", "").split(",") if s.strip()][:3]
+        regions      = [r.strip() for r in input_data.get("regions", "").split(",") if r.strip()]
+        comp_names   = [c.strip() for c in input_data.get("competitor_names", "").split(",") if c.strip()][:3]
+        comp_urls    = [u.strip() for u in input_data.get("competitor_urls", "").split(",") if u.strip()][:3]
+        num_prompts  = max(5, min(30, int(input_data.get("num_prompts", "10") or 10)))
+        try:
+            result = run_aiv_pipeline(
+                client_name=client_name, client_url=client_url,
+                personas=personas, services=services, regions=regions,
+                competitor_names=comp_names, competitor_urls=comp_urls,
+                num_prompts=num_prompts,
+            )
+            result["is_dummy"] = False
+            return result
+        except Exception as e:
+            return {"error": str(e), "is_dummy": False}
+
+
+# ── Registry ────────────────────────────────────────────────
 
 AGENT_REGISTRY: dict[str, type] = {
     "landing-page": LandingPageAgent,
@@ -624,6 +748,8 @@ AGENT_REGISTRY: dict[str, type] = {
     "cwv":          CWVAgent,
     "utm":          UTMAgent,
     "conversion":   ConversionAgent,
+    "seo-project":  SeoProjectAgent,
+    "aiv":          AIVAgent,
 }
 
 

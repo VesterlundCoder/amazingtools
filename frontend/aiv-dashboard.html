@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>AI Visibility Dashboard — Amazing Tools</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <script>tailwind.config={theme:{extend:{fontFamily:{sans:['Inter','sans-serif']}}}}</script>
+  <style>
+    *{font-family:'Inter',sans-serif}
+    body{background:#f8fafc;color:#101010}
+    .nav-link{color:#555;font-size:14px;font-weight:500;transition:color .15s;text-decoration:none}
+    .nav-link:hover{color:#0bb4aa}
+    .card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.06);padding:24px}
+    .stat-card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:20px;text-align:center}
+    .run-row{border-bottom:1px solid #f1f5f9;padding:12px 16px;cursor:pointer;transition:background .12s}
+    .run-row:hover{background:#f0fdfc}
+    .run-row.active{background:#e6fdfb;border-left:3px solid #0bb4aa}
+    .badge{display:inline-flex;align-items:center;gap:4px;padding:2px 10px;border-radius:9999px;font-size:11px;font-weight:700}
+    .badge-client{background:#e6fdfb;color:#0bb4aa;border:1px solid #b2ede9}
+    .badge-competitor{background:#fef2f2;color:#dc2626;border:1px solid #fecaca}
+    .badge-done{background:#e6f9f0;color:#059669;border:1px solid #a7f3d0}
+    .badge-running{background:#e6fdfb;color:#0bb4aa;border:1px solid #b2ede9}
+    .badge-dummy{background:#fffbeb;color:#b45309;border:1px solid #fcd34d}
+    .gap-item{padding:10px 14px;background:#fffbeb;border-left:3px solid #fcd34d;border-radius:0 8px 8px 0;margin-bottom:8px;font-size:13px;color:#374151}
+    .sample-card{border:1px solid #e2e8f0;border-radius:10px;padding:14px;margin-bottom:10px}
+    .tab-btn{padding:8px 18px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid transparent;transition:all .15s}
+    .tab-btn.active{background:#e6fdfb;color:#0bb4aa;border-color:#b2ede9}
+    .tab-btn:not(.active){color:#666;background:#f8fafc}
+    .tab-btn:not(.active):hover{background:#f0fdfc}
+    .tab-panel{display:none}
+    .tab-panel.active{display:block}
+    .progress-bar{height:8px;border-radius:9999px;background:#f1f5f9;overflow:hidden;margin-top:6px}
+    .progress-fill{height:8px;border-radius:9999px;background:#0bb4aa;transition:width .4s}
+    .logout-btn{background:none;border:1px solid #e2e8f0;color:#555;padding:6px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer}
+    .logout-btn:hover{border-color:#0bb4aa;color:#0bb4aa}
+  </style>
+</head>
+<body class="min-h-screen">
+
+<nav style="background:#fff;border-bottom:1px solid #e2e8f0;position:sticky;top:0;z-index:50">
+  <div class="max-w-7xl mx-auto px-6 flex items-center justify-between" style="height:60px">
+    <a href="dashboard.html" style="font-weight:800;font-size:18px;color:#101010;text-decoration:none;letter-spacing:-0.5px">
+      Amazing <span style="color:#0bb4aa">Tools</span>
+    </a>
+    <div class="flex items-center gap-6">
+      <a href="agents.html"       class="nav-link">Agents</a>
+      <a href="aiv-dashboard.html" class="nav-link" style="color:#0bb4aa;font-weight:600">AI Visibility</a>
+      <a href="seo-crawler.html"  class="nav-link">SEO Crawler</a>
+      <button class="logout-btn" onclick="logout()">Log out</button>
+    </div>
+  </div>
+</nav>
+
+<!-- Hero -->
+<div style="background:linear-gradient(135deg,#f0fdfc 0%,#fff 60%);border-bottom:1px solid #e2e8f0;padding:32px 0 24px">
+  <div class="max-w-7xl mx-auto px-6 flex items-center justify-between">
+    <div>
+      <h1 style="font-size:1.5rem;font-weight:800;color:#101010;letter-spacing:-0.5px;margin:0 0 6px">📡 AI Visibility Dashboard</h1>
+      <p style="color:#666;font-size:14px;margin:0">Track how visible your brand is when AI answers questions in your market.</p>
+    </div>
+    <a href="agent-runner.html?agent=aiv" style="background:#0bb4aa;color:#fff;padding:10px 22px;border-radius:8px;font-size:14px;font-weight:600;text-decoration:none;display:inline-block">
+      + New Run
+    </a>
+  </div>
+</div>
+
+<div class="max-w-7xl mx-auto px-6 py-8" style="display:grid;grid-template-columns:280px 1fr;gap:24px;align-items:start">
+
+  <!-- Left: Run list -->
+  <div>
+    <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#aaa;margin-bottom:10px">Visibility Runs</p>
+    <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden">
+      <div id="run-list-loading" style="padding:24px;text-align:center;color:#aaa;font-size:13px">Loading…</div>
+      <div id="run-list-empty"   style="padding:24px;text-align:center;color:#aaa;font-size:13px;display:none">
+        No runs yet.<br><a href="agent-runner.html?agent=aiv" style="color:#0bb4aa;font-weight:600">Start a run →</a>
+      </div>
+      <div id="run-list"></div>
+    </div>
+  </div>
+
+  <!-- Right: Results panel -->
+  <div id="results-panel">
+    <div class="card" style="padding:48px;text-align:center">
+      <div style="font-size:36px;margin-bottom:12px">📡</div>
+      <p style="color:#666;font-size:14px">Select a run from the list to view its visibility results.</p>
+      <p style="color:#aaa;font-size:12px;margin-top:8px">Or <a href="agent-runner.html?agent=aiv" style="color:#0bb4aa;font-weight:600">start a new run</a> using dummy data to explore the dashboard.</p>
+    </div>
+  </div>
+
+</div>
+
+<footer style="border-top:1px solid #e2e8f0;padding:20px 0;margin-top:40px">
+  <div class="max-w-7xl mx-auto px-6">
+    <span style="font-size:12px;color:#aaa">Amazing Tools · AI Visibility Tracker · Powered by GPT-4o-mini</span>
+  </div>
+</footer>
+
+<script>
+const API_BASE = 'https://web-production-c14f30.up.railway.app';
+if (!sessionStorage.getItem('at_auth')) window.location.href = 'login.html';
+function logout(){ sessionStorage.removeItem('at_auth'); window.location.href='login.html'; }
+
+let allRuns = [];
+let activeJobId = null;
+
+async function loadRunList() {
+  try {
+    const r = await fetch(`${API_BASE}/api/agents/jobs?agent=aiv&limit=20`);
+    allRuns = await r.json();
+    document.getElementById('run-list-loading').style.display = 'none';
+    if (!allRuns.length) { document.getElementById('run-list-empty').style.display = 'block'; return; }
+    renderRunList();
+  } catch {
+    document.getElementById('run-list-loading').textContent = 'API offline.';
+  }
+}
+
+function renderRunList() {
+  const el = document.getElementById('run-list');
+  el.innerHTML = allRuns.map(j => {
+    const active = j.id === activeJobId ? ' active' : '';
+    const badge  = j.status === 'done' ? '<span class="badge badge-done">✓</span>' :
+                   j.status === 'running' ? '<span class="badge badge-running">⟳</span>' :
+                   `<span class="badge" style="background:#f1f5f9;color:#888">${j.status}</span>`;
+    const dt = new Date(j.created_at).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+    return `<div class="run-row${active}" onclick="selectRun('${j.id}')">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:13px;font-weight:600;color:#101010">${dt}</span>
+        ${badge}
+      </div>
+      <div style="font-size:11px;color:#888;margin-top:3px">${j.id.slice(0,8)}…</div>
+    </div>`;
+  }).join('');
+}
+
+async function selectRun(jobId) {
+  activeJobId = jobId;
+  renderRunList();
+  showLoading();
+  try {
+    const r = await fetch(`${API_BASE}/api/agents/jobs/${jobId}`);
+    const job = await r.json();
+    if (job.status === 'done' && job.result) renderResults(job.result);
+    else if (job.status === 'error') showError(job.error || 'Run failed.');
+    else showLoading(job.status);
+  } catch(e) { showError(e.message); }
+}
+
+function showLoading(status='running') {
+  document.getElementById('results-panel').innerHTML = `
+    <div class="card" style="padding:48px;text-align:center">
+      <div style="font-size:32px;margin-bottom:12px;animation:pulse 1.4s infinite">📡</div>
+      <p style="color:#0bb4aa;font-weight:600;font-size:14px">Status: ${status}</p>
+      <p style="color:#aaa;font-size:12px;margin-top:6px">Visibility runs take 1–10 minutes depending on prompt count.</p>
+    </div>
+    <style>@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}</style>`;
+}
+function showError(msg) {
+  document.getElementById('results-panel').innerHTML = `
+    <div class="card" style="border-color:#fecaca">
+      <p style="color:#dc2626;font-weight:700;margin:0 0 6px">Run Error</p>
+      <p style="color:#555;font-size:13px;margin:0">${msg}</p>
+    </div>`;
+}
+
+function renderResults(d) {
+  const isDummy = d.is_dummy;
+  const s = d.summary || {};
+  const brands = d.brands || [];
+  const byPersona = d.by_persona || [];
+  const byService = d.by_service || [];
+  const gaps = d.visibility_gaps || [];
+  const samples = d.sample_responses || [];
+
+  const clientMentionRate = s.client_mention_rate || 0;
+  const clientSoV = s.client_sov_mentions || 0;
+  const color = clientMentionRate >= 0.5 ? '#059669' : clientMentionRate >= 0.3 ? '#b45309' : '#dc2626';
+
+  // Summary stats
+  const statsHtml = `
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px">
+      <div class="stat-card">
+        <div style="font-size:28px;font-weight:800;color:${color}">${(clientMentionRate*100).toFixed(0)}%</div>
+        <div style="font-size:12px;color:#888;margin-top:4px;font-weight:600">Client Mention Rate</div>
+      </div>
+      <div class="stat-card">
+        <div style="font-size:28px;font-weight:800;color:#0bb4aa">${(clientSoV*100).toFixed(0)}%</div>
+        <div style="font-size:12px;color:#888;margin-top:4px;font-weight:600">Share of Voice</div>
+      </div>
+      <div class="stat-card">
+        <div style="font-size:28px;font-weight:800;color:#374151">${s.total_prompts||0}</div>
+        <div style="font-size:12px;color:#888;margin-top:4px;font-weight:600">Total Prompts</div>
+      </div>
+      <div class="stat-card">
+        <div style="font-size:28px;font-weight:800;color:#374151">${s.avg_response_length||0}</div>
+        <div style="font-size:12px;color:#888;margin-top:4px;font-weight:600">Avg Response Length</div>
+      </div>
+    </div>`;
+
+  // Brands bar chart data
+  const brandNames  = brands.map(b=>b.name);
+  const mentionRates= brands.map(b=>+(b.mention_rate*100).toFixed(1));
+  const barColors   = brands.map(b=>b.type==='client'?'#0bb4aa':'#e2e8f0');
+  const borderColors= brands.map(b=>b.type==='client'?'#0bb4aa':'#94a3b8');
+
+  // By-persona bar data
+  const personaNames = byPersona.map(p=>p.persona);
+  const personaRates = byPersona.map(p=>+(p.mention_rate*100).toFixed(1));
+
+  // By-service bar data
+  const serviceNames = byService.map(s=>s.service);
+  const serviceRates = byService.map(s=>+(s.mention_rate*100).toFixed(1));
+
+  const gapsHtml = gaps.map(g=>`<div class="gap-item">⚠ ${g}</div>`).join('');
+
+  const samplesHtml = samples.map(s=>`
+    <div class="sample-card">
+      <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px">
+        ${s.mentions_client
+          ? '<span style="color:#059669;margin-right:6px">✓ Client mentioned</span>'
+          : '<span style="color:#dc2626;margin-right:6px">✗ Client not mentioned</span>'}
+      </div>
+      <div style="font-size:12px;color:#555;margin-bottom:8px;font-style:italic">"${s.prompt}"</div>
+      <div style="font-size:12px;color:#374151;line-height:1.6;background:#f8fafc;padding:10px;border-radius:6px">${s.answer}</div>
+    </div>`).join('');
+
+  document.getElementById('results-panel').innerHTML = `
+    ${isDummy?`<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;font-size:12px;color:#b45309;font-weight:600;margin-bottom:16px">⚡ Dummy data — run with real client info for live results.</div>`:''}
+    <div style="margin-bottom:16px;display:flex;gap:8px">
+      <button class="tab-btn active" onclick="showTab(event,'overview')">Overview</button>
+      <button class="tab-btn" onclick="showTab(event,'brands')">Brands</button>
+      <button class="tab-btn" onclick="showTab(event,'breakdown')">Breakdown</button>
+      <button class="tab-btn" onclick="showTab(event,'gaps')">Gaps & Samples</button>
+    </div>
+
+    <!-- Overview tab -->
+    <div id="tab-overview" class="tab-panel active">
+      ${statsHtml}
+      <div class="card" style="margin-bottom:16px">
+        <h3 style="font-size:14px;font-weight:700;margin:0 0 16px">Brand Mention Rates</h3>
+        <div id="chart-brands" style="height:260px"></div>
+      </div>
+    </div>
+
+    <!-- Brands tab -->
+    <div id="tab-brands" class="tab-panel">
+      <div class="card">
+        <h3 style="font-size:14px;font-weight:700;margin:0 0 20px">Brand Visibility Comparison</h3>
+        ${brands.map(b=>`
+          <div style="margin-bottom:18px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-size:13px;font-weight:700;color:#101010">${b.name}</span>
+                <span class="badge ${b.type==='client'?'badge-client':'badge-competitor'}">${b.type}</span>
+              </div>
+              <span style="font-size:13px;font-weight:700;color:#101010">${(b.mention_rate*100).toFixed(0)}%</span>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill" style="width:${(b.mention_rate*100).toFixed(0)}%;background:${b.type==='client'?'#0bb4aa':'#94a3b8'}"></div>
+            </div>
+            <div style="font-size:11px;color:#888;margin-top:4px">${b.prompts_with_mentions} prompts · SoV ${(b.sov_mentions*100).toFixed(0)}%</div>
+          </div>`).join('')}
+        <div id="chart-sov" style="height:260px;margin-top:20px"></div>
+      </div>
+    </div>
+
+    <!-- Breakdown tab -->
+    <div id="tab-breakdown" class="tab-panel">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div class="card">
+          <h3 style="font-size:14px;font-weight:700;margin:0 0 16px">By Persona</h3>
+          <div id="chart-persona" style="height:240px"></div>
+        </div>
+        <div class="card">
+          <h3 style="font-size:14px;font-weight:700;margin:0 0 16px">By Service</h3>
+          <div id="chart-service" style="height:240px"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Gaps + Samples tab -->
+    <div id="tab-gaps" class="tab-panel">
+      <div class="card" style="margin-bottom:16px">
+        <h3 style="font-size:14px;font-weight:700;margin:0 0 12px">Visibility Gaps</h3>
+        ${gapsHtml || '<p style="font-size:13px;color:#888">No major gaps found — visibility looks solid across all segments.</p>'}
+      </div>
+      <div class="card">
+        <h3 style="font-size:14px;font-weight:700;margin:0 0 12px">Sample AI Responses</h3>
+        ${samplesHtml || '<p style="font-size:13px;color:#888">No sample responses available.</p>'}
+      </div>
+    </div>`;
+
+  // Render charts after DOM update
+  requestAnimationFrame(() => {
+    const layout = {
+      paper_bgcolor:'transparent', plot_bgcolor:'transparent',
+      margin:{t:10,b:60,l:40,r:10},
+      font:{family:'Inter, sans-serif', size:12, color:'#374151'},
+      showlegend:false,
+    };
+
+    // Brand bar chart
+    Plotly.newPlot('chart-brands', [{
+      type:'bar', x:brandNames, y:mentionRates,
+      marker:{color:barColors, line:{color:borderColors, width:1.5}},
+      text:mentionRates.map(v=>v+'%'), textposition:'outside',
+    }], {...layout, yaxis:{title:'Mention Rate %', ticksuffix:'%'}}, {responsive:true, displayModeBar:false});
+
+    // SoV donut
+    const sovVals = brands.map(b=>b.sov_mentions);
+    Plotly.newPlot('chart-sov', [{
+      type:'pie', labels:brandNames, values:sovVals,
+      hole:0.45,
+      marker:{colors:brands.map(b=>b.type==='client'?'#0bb4aa':'#e2e8f0'),
+              line:{color:'#fff',width:2}},
+      textinfo:'label+percent',
+    }], {...layout, margin:{t:10,b:10,l:10,r:10}, showlegend:true,
+         legend:{orientation:'h', y:-0.15}}, {responsive:true, displayModeBar:false});
+
+    // Persona bar
+    if (personaNames.length) {
+      Plotly.newPlot('chart-persona', [{
+        type:'bar', x:personaRates, y:personaNames,
+        orientation:'h', marker:{color:'#0bb4aa'},
+        text:personaRates.map(v=>v+'%'), textposition:'outside',
+      }], {...layout, margin:{t:10,b:40,l:90,r:40},
+           xaxis:{ticksuffix:'%', range:[0,105]}}, {responsive:true, displayModeBar:false});
+    }
+
+    // Service bar
+    if (serviceNames.length) {
+      Plotly.newPlot('chart-service', [{
+        type:'bar', x:serviceRates, y:serviceNames,
+        orientation:'h', marker:{color:'#b2ede9'},
+        text:serviceRates.map(v=>v+'%'), textposition:'outside',
+      }], {...layout, margin:{t:10,b:40,l:90,r:40},
+           xaxis:{ticksuffix:'%', range:[0,105]}}, {responsive:true, displayModeBar:false});
+    }
+  });
+}
+
+function showTab(e, tabId) {
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  e.target.classList.add('active');
+  document.getElementById('tab-'+tabId).classList.add('active');
+}
+
+// Auto-select latest job from URL param or first run
+const urlParams = new URLSearchParams(location.search);
+const jumpJob   = urlParams.get('job');
+
+loadRunList().then(() => {
+  if (jumpJob)                   selectRun(jumpJob);
+  else if (allRuns.length > 0)   selectRun(allRuns[0].id);
+});
+</script>
+</body>
+</html>

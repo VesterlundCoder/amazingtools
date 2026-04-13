@@ -306,6 +306,8 @@ function renderResult(data) {
     'cwv':          renderCWV,
     'utm':          renderUTM,
     'conversion':   renderConversion,
+    'seo-project':  renderSeoProject,
+    'aiv':          renderAIV,
   }[AGENT_ID];
   const html = fn ? fn(data) : genericRender(data);
   document.getElementById('results-area').innerHTML = html;
@@ -573,6 +575,115 @@ function renderConversion(d) {
       <div class="card" style="padding:24px"><h3 style="font-size:14px;font-weight:700;margin:0 0 12px">Diagnosis Steps</h3>${steps}</div>
       <div class="card" style="padding:24px"><h3 style="font-size:14px;font-weight:700;margin:0 0 12px">Fixes</h3>${fixes}</div>
       ${queries?`<div class="card" style="padding:24px"><h3 style="font-size:14px;font-weight:700;margin:0 0 12px">BigQuery Queries</h3>${queries}</div>`:''}
+    </div>`;
+}
+
+// ── SEO Project ───────────────────────────────────────────────────────────────
+function renderSeoProject(d) {
+  if (d.error) {
+    return `<div class="card" style="padding:24px;border-color:#fecaca">
+      ${d.is_dummy?dummyBanner():''}
+      <p style="color:#dc2626;font-weight:700;margin:0 0 8px">Registration Error</p>
+      <p style="color:#374151;font-size:13px;margin:0">${d.error}</p>
+    </div>`;
+  }
+  const phases = (d.phases_queued||[]).map((p,i)=>`
+    <div style="display:flex;gap:12px;padding:10px 0;border-bottom:1px solid #f1f5f9;align-items:center">
+      <div style="width:22px;height:22px;border-radius:50%;background:#e6fdfb;color:#0bb4aa;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0">${i}</div>
+      <div style="font-size:13px;color:#374151">${p}</div>
+    </div>`).join('');
+  return `
+    <div style="display:flex;flex-direction:column;gap:16px">
+      ${d.is_dummy?dummyBanner():''}
+      <div class="card" style="padding:24px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+          <div style="width:44px;height:44px;border-radius:12px;background:#e6fdfb;color:#0bb4aa;display:flex;align-items:center;justify-content:center;font-size:22px">🌐</div>
+          <div>
+            <div style="font-size:15px;font-weight:700;color:#101010">${d.site_name||d.site_url}</div>
+            <div style="font-size:12px;color:#059669;font-weight:600;margin-top:2px">✓ ${d.status||'registered'}</div>
+          </div>
+        </div>
+        <p style="font-size:13px;color:#374151;line-height:1.6;margin:0 0 4px">${d.message||''}</p>
+        ${d.note?`<p style="font-size:12px;color:#888;margin:8px 0 0">${d.note}</p>`:''}
+      </div>
+      <div class="card" style="padding:24px">
+        <h3 style="font-size:14px;font-weight:700;margin:0 0 4px">Phases Queued</h3>
+        <p style="font-size:12px;color:#888;margin:0 0 12px">The SEO agent will run these phases automatically on Railway.</p>
+        ${phases}
+      </div>
+    </div>`;
+}
+
+// ── AI Visibility Tracker ─────────────────────────────────────────────────────
+function renderAIV(d) {
+  if (d.error) {
+    return `<div class="card" style="padding:24px;border-color:#fecaca">
+      ${d.is_dummy?dummyBanner():''}
+      <p style="color:#dc2626;font-weight:700;margin:0 0 8px">AIV Pipeline Error</p>
+      <p style="color:#374151;font-size:13px;margin:0">${d.error}</p>
+    </div>`;
+  }
+  const s = d.summary||{};
+  const brands = d.brands||[];
+  const gaps   = d.visibility_gaps||[];
+  const samples= d.sample_responses||[];
+  const clientMR = s.client_mention_rate||0;
+  const color = clientMR>=0.5?'#059669':clientMR>=0.3?'#b45309':'#dc2626';
+
+  const brandRows = brands.map(b=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f1f5f9">
+      <div>
+        <span style="font-size:13px;font-weight:700;color:#101010">${b.name}</span>
+        <span style="margin-left:8px;font-size:11px;padding:2px 8px;border-radius:9999px;font-weight:700;${b.type==='client'?'background:#e6fdfb;color:#0bb4aa':'background:#f1f5f9;color:#888'}">${b.type}</span>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:14px;font-weight:700;color:#101010">${(b.mention_rate*100).toFixed(0)}%</div>
+        <div style="font-size:11px;color:#888">SoV ${(b.sov_mentions*100).toFixed(0)}%</div>
+      </div>
+    </div>`).join('');
+
+  const gapsHtml = gaps.map(g=>`<div style="padding:10px 14px;background:#fffbeb;border-left:3px solid #fcd34d;border-radius:0 8px 8px 0;margin-bottom:8px;font-size:13px;color:#374151">⚠ ${g}</div>`).join('');
+
+  const samplesHtml = samples.map(s=>`
+    <div style="border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:10px">
+      <div style="font-size:12px;font-weight:700;margin-bottom:6px;${s.mentions_client?'color:#059669':'color:#dc2626'}">${s.mentions_client?'✓ Client mentioned':'✗ Not mentioned'}</div>
+      <div style="font-size:12px;color:#555;font-style:italic;margin-bottom:8px">"${s.prompt}"</div>
+      <div style="font-size:12px;color:#374151;background:#f8fafc;padding:8px;border-radius:6px;line-height:1.6">${s.answer}</div>
+    </div>`).join('');
+
+  const jobId = new URLSearchParams(location.search).get('job');
+  const dashLink = jobId ? `aiv-dashboard.html?job=${jobId}` : 'aiv-dashboard.html';
+
+  return `
+    <div style="display:flex;flex-direction:column;gap:16px">
+      ${d.is_dummy?dummyBanner():''}
+      <div style="background:#e6fdfb;border:1px solid #b2ede9;border-radius:8px;padding:10px 16px;font-size:13px;color:#0bb4aa;font-weight:600;display:flex;justify-content:space-between;align-items:center">
+        <span>View full charts in the AI Visibility Dashboard</span>
+        <a href="${dashLink}" style="color:#0bb4aa;font-weight:700;text-decoration:none;font-size:13px">Open Dashboard →</a>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+        <div class="card" style="padding:18px;text-align:center">
+          <div style="font-size:26px;font-weight:800;color:${color}">${(clientMR*100).toFixed(0)}%</div>
+          <div style="font-size:12px;color:#888;font-weight:600;margin-top:4px">Client Mention Rate</div>
+        </div>
+        <div class="card" style="padding:18px;text-align:center">
+          <div style="font-size:26px;font-weight:800;color:#0bb4aa">${((s.client_sov_mentions||0)*100).toFixed(0)}%</div>
+          <div style="font-size:12px;color:#888;font-weight:600;margin-top:4px">Share of Voice</div>
+        </div>
+        <div class="card" style="padding:18px;text-align:center">
+          <div style="font-size:26px;font-weight:800;color:#374151">${s.total_prompts||0}</div>
+          <div style="font-size:12px;color:#888;font-weight:600;margin-top:4px">Total Prompts</div>
+        </div>
+      </div>
+      <div class="card" style="padding:24px">
+        <h3 style="font-size:14px;font-weight:700;margin:0 0 12px">Brand Visibility</h3>
+        ${brandRows}
+      </div>
+      ${gaps.length?`<div class="card" style="padding:24px"><h3 style="font-size:14px;font-weight:700;margin:0 0 12px">Visibility Gaps</h3>${gapsHtml}</div>`:''}
+      <div class="card" style="padding:24px">
+        <h3 style="font-size:14px;font-weight:700;margin:0 0 12px">Sample AI Responses</h3>
+        ${samplesHtml||'<p style="font-size:13px;color:#888">No samples available.</p>'}
+      </div>
     </div>`;
 }
 
