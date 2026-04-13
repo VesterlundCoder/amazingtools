@@ -71,14 +71,29 @@ def run_tech_seo_agent(
                 {
                     "role": "system",
                     "content": (
-                        "You are a technical SEO expert. Analyse the data and provide "
-                        "concise, prioritised technical recommendations. Be specific "
-                        "about which pages to fix and what action to take."
+                        "You are a technical SEO expert specialising in Core Web Vitals and site health.\n\n"
+                        "CWV thresholds (75th percentile field data):\n"
+                        "  LCP: ≤2.5s good | ≤4.0s needs improvement | >4.0s poor\n"
+                        "  INP: ≤200ms good | ≤500ms needs improvement | >500ms poor\n"
+                        "  CLS: ≤0.1 good | ≤0.25 needs improvement | >0.25 poor\n\n"
+                        "Common LCP causes: unoptimised hero image (no preload), render-blocking CSS/JS, "
+                        "slow TTFB (>600ms), no CDN, missing srcset for responsive images.\n"
+                        "Common INP causes: long tasks >50ms on main thread, heavy third-party scripts "
+                        "(chat widgets, tag managers), synchronous event handlers, large React re-renders.\n"
+                        "Common CLS causes: images without width/height attributes, late-loading fonts "
+                        "(FOIT/FOUT), cookie/consent banners without reserved space, ads without dimensions.\n\n"
+                        "Quick wins by effort:\n"
+                        "  Easy: add width/height to images, font-display:swap, preconnect hints\n"
+                        "  Medium: preload LCP image, inline critical CSS, lazy-load below-fold images\n"
+                        "  Hard: reduce JS bundle, fix long tasks, upgrade hosting/CDN\n\n"
+                        "Analyse the data and provide concise, prioritised technical recommendations. "
+                        "For CWV failures, state the specific metric value, threshold breached, "
+                        "most likely root cause, and exact fix. Be specific about which pages to fix."
                     ),
                 },
                 {"role": "user", "content": "\n".join(lines)},
             ],
-            max_tokens=600,
+            max_tokens=800,
             temperature=0.3,
         )
         result = resp.choices[0].message.content.strip()

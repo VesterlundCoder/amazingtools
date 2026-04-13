@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Agent Runner — Amazing Tools</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config={theme:{extend:{fontFamily:{sans:['Inter','sans-serif']}}}}</script>
+  <style>
+    *{font-family:'Inter',sans-serif}
+    body{background:#f8fafc;color:#101010}
+    .nav-link{color:#555;font-size:14px;font-weight:500;transition:color .15s;text-decoration:none}
+    .nav-link:hover{color:#0bb4aa}
+    .card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+    .btn-primary{background:#0bb4aa;color:#fff;border:none;padding:10px 22px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:background .15s}
+    .btn-primary:hover{background:#09a09a}
+    .btn-primary:disabled{background:#94a3b8;cursor:not-allowed}
+    .btn-secondary{background:#fff;color:#555;border:1px solid #e2e8f0;padding:10px 22px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:all .15s}
+    .btn-secondary:hover{border-color:#0bb4aa;color:#0bb4aa}
+    .field-label{font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;display:block}
+    .field-input{width:100%;border:1px solid #d1d5db;border-radius:8px;padding:10px 12px;font-size:14px;color:#101010;background:#fff;outline:none;transition:border .15s;box-sizing:border-box}
+    .field-input:focus{border-color:#0bb4aa;box-shadow:0 0 0 3px rgba(11,180,170,.08)}
+    .toggle-wrap{display:flex;align-items:center;gap:10px;margin-bottom:20px}
+    .toggle{position:relative;width:40px;height:22px;cursor:pointer}
+    .toggle input{opacity:0;width:0;height:0}
+    .toggle-slider{position:absolute;inset:0;background:#d1d5db;border-radius:22px;transition:.2s}
+    .toggle input:checked+.toggle-slider{background:#0bb4aa}
+    .toggle-slider:before{content:'';position:absolute;width:16px;height:16px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.2s}
+    .toggle input:checked+.toggle-slider:before{transform:translateX(18px)}
+    .score-ring{width:72px;height:72px;position:relative;display:inline-block}
+    .score-ring svg{transform:rotate(-90deg)}
+    .score-ring .score-text{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800}
+    .section-tab{padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid transparent;transition:all .15s}
+    .section-tab.active{background:#e6fdfb;color:#0bb4aa;border-color:#b2ede9}
+    .section-tab:not(.active){color:#666;background:#f8fafc}
+    .section-tab:not(.active):hover{background:#f0fdfc}
+    .chip{display:inline-block;padding:3px 10px;border-radius:9999px;font-size:11px;font-weight:600;margin:2px}
+    .chip-green{background:#e6f9f0;color:#059669;border:1px solid #a7f3d0}
+    .chip-red{background:#fef2f2;color:#dc2626;border:1px solid #fecaca}
+    .chip-amber{background:#fffbeb;color:#b45309;border:1px solid #fcd34d}
+    .fit-high{background:#e6f9f0;color:#059669}
+    .fit-medium{background:#fffbeb;color:#b45309}
+    .fit-low,.fit-none{background:#fef2f2;color:#dc2626}
+    .icp-badge{padding:2px 10px;border-radius:9999px;font-size:11px;font-weight:700}
+    pre{background:#1e293b;color:#e2e8f0;border-radius:8px;padding:16px;font-size:12px;overflow-x:auto;white-space:pre-wrap;word-break:break-word}
+    .pulse{animation:pulse 1.4s ease-in-out infinite}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+    .grade-good{color:#059669;font-weight:700}
+    .grade-needs-improvement{color:#b45309;font-weight:700}
+    .grade-poor{color:#dc2626;font-weight:700}
+  </style>
+</head>
+<body class="min-h-screen">
+
+<nav style="background:#fff;border-bottom:1px solid #e2e8f0;position:sticky;top:0;z-index:50">
+  <div class="max-w-5xl mx-auto px-6 flex items-center justify-between" style="height:60px">
+    <a href="dashboard.html" style="font-weight:800;font-size:18px;color:#101010;text-decoration:none;letter-spacing:-0.5px">
+      Amazing <span style="color:#0bb4aa">Tools</span>
+    </a>
+    <div class="flex items-center gap-6">
+      <a href="agents.html" class="nav-link" style="color:#0bb4aa;font-weight:600">← All Agents</a>
+    </div>
+  </div>
+</nav>
+
+<!-- Hero -->
+<div style="background:linear-gradient(135deg,#f0fdfc 0%,#fff 60%);border-bottom:1px solid #e2e8f0;padding:32px 0 24px">
+  <div class="max-w-5xl mx-auto px-6">
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:8px">
+      <div id="hero-icon" style="font-size:28px"></div>
+      <h1 id="hero-title" style="font-size:1.5rem;font-weight:800;color:#101010;letter-spacing:-0.5px;margin:0">Loading…</h1>
+    </div>
+    <p id="hero-desc" style="color:#666;font-size:14px;margin:0"></p>
+  </div>
+</div>
+
+<div class="max-w-5xl mx-auto px-6 py-8" style="display:grid;grid-template-columns:340px 1fr;gap:28px;align-items:start">
+
+  <!-- Left: Input panel -->
+  <div>
+    <div class="card" style="padding:24px">
+      <h2 style="font-size:14px;font-weight:700;color:#101010;margin:0 0 20px">Configure</h2>
+
+      <!-- Dummy mode toggle -->
+      <div class="toggle-wrap">
+        <label class="toggle">
+          <input type="checkbox" id="dummy-toggle"/>
+          <span class="toggle-slider"></span>
+        </label>
+        <div>
+          <div style="font-size:13px;font-weight:600;color:#101010">Test with dummy data</div>
+          <div style="font-size:11px;color:#888">Instant results — no API calls needed</div>
+        </div>
+      </div>
+
+      <div id="input-fields"></div>
+
+      <button id="run-btn" class="btn-primary" style="width:100%;margin-top:20px" onclick="runAgent()">
+        Run Agent
+      </button>
+      <button id="dummy-btn" class="btn-secondary" style="width:100%;margin-top:10px;display:none" onclick="runDummy()">
+        ⚡ Run with Dummy Data
+      </button>
+    </div>
+
+    <!-- Recent jobs for this agent -->
+    <div style="margin-top:16px">
+      <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#aaa;margin-bottom:10px">Recent Runs</p>
+      <div id="recent-jobs" style="display:flex;flex-direction:column;gap:8px"></div>
+    </div>
+  </div>
+
+  <!-- Right: Results panel -->
+  <div>
+    <div id="results-area">
+      <div class="card" style="padding:48px;text-align:center">
+        <div style="font-size:36px;margin-bottom:12px">🤖</div>
+        <p style="color:#666;font-size:14px">Configure and run the agent to see results here.</p>
+        <p style="color:#aaa;font-size:12px;margin-top:8px">Use <strong>dummy data</strong> mode for instant demo results.</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer style="border-top:1px solid #e2e8f0;padding:20px 0;margin-top:40px">
+  <div class="max-w-5xl mx-auto px-6">
+    <span style="font-size:12px;color:#aaa">Amazing Tools · Marketing Agents</span>
+  </div>
+</footer>
+
+<script>
+const API_BASE = 'https://web-production-c14f30.up.railway.app';
+if (!sessionStorage.getItem('at_auth')) window.location.href = 'login.html';
+
+const params   = new URLSearchParams(location.search);
+const AGENT_ID = params.get('agent') || 'landing-page';
+const JUMP_JOB = params.get('job');
+
+let agentMeta = null;
+let pollTimer = null;
+
+// ── Bootstrap ─────────────────────────────────────────────────────────────────
+async function init() {
+  try {
+    const r = await fetch(`${API_BASE}/api/agents/list`);
+    const agents = await r.json();
+    agentMeta = agents.find(a => a.id === AGENT_ID);
+    if (!agentMeta) { document.body.innerHTML = '<p style="padding:40px;color:red">Unknown agent.</p>'; return; }
+    document.title = agentMeta.name + ' — Amazing Tools';
+    document.getElementById('hero-icon').textContent  = agentMeta.icon;
+    document.getElementById('hero-title').textContent = agentMeta.name;
+    document.getElementById('hero-desc').textContent  = agentMeta.description;
+    buildInputFields(agentMeta.inputs);
+    loadRecentJobs();
+    if (JUMP_JOB) fetchAndRender(JUMP_JOB);
+  } catch(e) {
+    console.error(e);
+  }
+}
+
+function buildInputFields(inputs) {
+  const container = document.getElementById('input-fields');
+  container.innerHTML = inputs.map(inp => {
+    if (inp.type === 'textarea') {
+      return `<div style="margin-bottom:16px">
+        <label class="field-label" for="f_${inp.key}">${inp.label}</label>
+        <textarea id="f_${inp.key}" class="field-input" rows="5" placeholder="${inp.placeholder}" style="resize:vertical"></textarea>
+      </div>`;
+    }
+    return `<div style="margin-bottom:16px">
+      <label class="field-label" for="f_${inp.key}">${inp.label}</label>
+      <input id="f_${inp.key}" class="field-input" type="text" placeholder="${inp.placeholder}"/>
+    </div>`;
+  }).join('');
+}
+
+function collectInput() {
+  const data = {};
+  agentMeta.inputs.forEach(inp => {
+    const el = document.getElementById('f_' + inp.key);
+    if (el) data[inp.key] = el.value.trim();
+  });
+  return data;
+}
+
+// ── Run handlers ──────────────────────────────────────────────────────────────
+async function runAgent(useDummy = false) {
+  const inputData = collectInput();
+  if (!useDummy) {
+    const firstKey = agentMeta.inputs[0]?.key;
+    if (firstKey && !inputData[firstKey]) {
+      alert('Please fill in the required field: ' + agentMeta.inputs[0].label);
+      return;
+    }
+  }
+
+  const btn = document.getElementById('run-btn');
+  btn.disabled = true;
+  btn.textContent = useDummy ? '⚡ Loading…' : '⟳ Running…';
+
+  showLoading();
+
+  try {
+    const resp = await fetch(`${API_BASE}/api/agents/run`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ agent: AGENT_ID, input: inputData, use_dummy: useDummy })
+    });
+    const { job_id } = await resp.json();
+    pollJob(job_id);
+  } catch(e) {
+    showError('Failed to start agent: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = 'Run Agent';
+  }
+}
+
+function runDummy() { runAgent(true); }
+
+async function pollJob(jobId) {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(async () => {
+    const job = await fetchJob(jobId);
+    if (!job) return;
+    if (job.status === 'done') {
+      clearInterval(pollTimer);
+      renderResult(job.result);
+      document.getElementById('run-btn').disabled = false;
+      document.getElementById('run-btn').textContent = 'Run Agent';
+      loadRecentJobs();
+    } else if (job.status === 'error') {
+      clearInterval(pollTimer);
+      showError(job.error || 'Agent failed.');
+      document.getElementById('run-btn').disabled = false;
+      document.getElementById('run-btn').textContent = 'Run Agent';
+    }
+  }, 1500);
+}
+
+async function fetchJob(jobId) {
+  try {
+    const r = await fetch(`${API_BASE}/api/agents/jobs/${jobId}`);
+    return await r.json();
+  } catch { return null; }
+}
+
+async function fetchAndRender(jobId) {
+  showLoading();
+  const job = await fetchJob(jobId);
+  if (!job) { showError('Job not found.'); return; }
+  if (job.status === 'done')    renderResult(job.result);
+  else if (job.status === 'error') showError(job.error);
+  else { showLoading(); pollJob(jobId); }
+}
+
+async function loadRecentJobs() {
+  try {
+    const r = await fetch(`${API_BASE}/api/agents/jobs?agent=${AGENT_ID}&limit=5`);
+    const jobs = await r.json();
+    const container = document.getElementById('recent-jobs');
+    if (!jobs.length) { container.innerHTML = '<p style="font-size:12px;color:#aaa">No runs yet.</p>'; return; }
+    container.innerHTML = jobs.map(j => `
+      <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <span style="font-size:12px;color:#888">${new Date(j.created_at).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</span>
+        ${statusPill(j.status)}
+        ${j.status==='done'?`<a href="?agent=${AGENT_ID}&job=${j.id}" style="font-size:12px;color:#0bb4aa;font-weight:600;text-decoration:none">View</a>`:''}
+      </div>
+    `).join('');
+  } catch {}
+}
+
+function statusPill(s) {
+  const m={done:['#059669','#e6f9f0','✓'],running:['#0bb4aa','#e6fdfb','⟳'],pending:['#b45309','#fffbeb','…'],error:['#dc2626','#fef2f2','✗']};
+  const [c,bg,ico]=m[s]||['#888','#f1f5f9','?'];
+  return `<span style="background:${bg};color:${c};padding:2px 8px;border-radius:9999px;font-size:11px;font-weight:600">${ico} ${s}</span>`;
+}
+
+// ── Loading / error states ────────────────────────────────────────────────────
+function showLoading() {
+  document.getElementById('results-area').innerHTML = `
+    <div class="card" style="padding:48px;text-align:center">
+      <div class="pulse" style="font-size:36px;margin-bottom:12px">${agentMeta?.icon || '🤖'}</div>
+      <p style="color:#0bb4aa;font-size:14px;font-weight:600">Agent is running…</p>
+      <p style="color:#aaa;font-size:12px;margin-top:6px">Results will appear here. This may take 15–60 seconds.</p>
+    </div>`;
+}
+
+function showError(msg) {
+  document.getElementById('results-area').innerHTML = `
+    <div class="card" style="padding:32px;border-color:#fecaca">
+      <p style="color:#dc2626;font-weight:700;margin:0 0 6px">Error</p>
+      <p style="color:#555;font-size:13px;margin:0">${msg}</p>
+    </div>`;
+}
+
+// ── Result renderers per agent type ──────────────────────────────────────────
+function renderResult(data) {
+  if (!data) { showError('No result data returned.'); return; }
+  const fn = {
+    'landing-page': renderLandingPage,
+    'competitor':   renderCompetitor,
+    'ad-copy':      renderAdCopy,
+    'lead-qual':    renderLeadQual,
+    'cwv':          renderCWV,
+    'utm':          renderUTM,
+    'conversion':   renderConversion,
+  }[AGENT_ID];
+  const html = fn ? fn(data) : genericRender(data);
+  document.getElementById('results-area').innerHTML = html;
+}
+
+// ── Landing Page ──────────────────────────────────────────────────────────────
+function renderLandingPage(d) {
+  const score = d.score || 0;
+  const color = score >= 75 ? '#059669' : score >= 50 ? '#b45309' : '#dc2626';
+  const secs = d.sections || {};
+  const sectionHtml = Object.entries(secs).map(([key, sec]) => `
+    <div style="margin-bottom:20px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <span style="font-size:13px;font-weight:700;color:#374151;text-transform:capitalize">${key}</span>
+        <span style="font-size:13px;font-weight:700;color:${color}">${sec.score}/${sec.max}</span>
+      </div>
+      <div style="height:6px;background:#f1f5f9;border-radius:9999px;margin-bottom:12px">
+        <div style="height:6px;background:${color};border-radius:9999px;width:${(sec.score/sec.max*100).toFixed(0)}%"></div>
+      </div>
+      ${(sec.items||[]).map(item=>`
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:8px 0;border-bottom:1px solid #f1f5f9;gap:12px">
+          <div>
+            <div style="font-size:12px;font-weight:600;color:#374151">${item.label}</div>
+            <div style="font-size:12px;color:#666;margin-top:2px">${item.feedback}</div>
+          </div>
+          <span style="font-size:13px;font-weight:700;color:${item.score>=7?'#059669':item.score>=5?'#b45309':'#dc2626'};white-space:nowrap">${item.score}/10</span>
+        </div>
+      `).join('')}
+    </div>
+  `).join('');
+
+  const changes = (d.top_changes||[]).map(c=>`
+    <div style="display:flex;gap:14px;padding:14px 0;border-bottom:1px solid #f1f5f9">
+      <div style="width:28px;height:28px;border-radius:50%;background:#e6fdfb;color:#0bb4aa;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">${c.priority}</div>
+      <div>
+        <div style="font-size:13px;font-weight:600;color:#101010">${c.change}</div>
+        <div style="font-size:12px;color:#059669;margin-top:3px">${c.impact}</div>
+      </div>
+    </div>
+  `).join('');
+
+  return `
+    <div style="display:flex;flex-direction:column;gap:16px">
+      ${d.is_dummy?dummyBanner():''}
+      <div class="card" style="padding:24px">
+        <div style="display:flex;align-items:center;gap:20px;margin-bottom:24px">
+          <div style="text-align:center">
+            <div style="font-size:42px;font-weight:800;color:${color};line-height:1">${score}</div>
+            <div style="font-size:11px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:.05em">/ 100</div>
+          </div>
+          <div>
+            <div style="font-size:15px;font-weight:700;color:#101010">CRO Score</div>
+            <div style="font-size:13px;color:#666">${d.url||''}</div>
+          </div>
+        </div>
+        ${sectionHtml}
+      </div>
+      <div class="card" style="padding:24px">
+        <h3 style="font-size:14px;font-weight:700;margin:0 0 4px">Top 5 Priority Changes</h3>
+        <p style="font-size:12px;color:#888;margin:0 0 16px">Ranked by estimated conversion impact</p>
+        ${changes}
+      </div>
+    </div>`;
+}
+
+// ── Competitor ────────────────────────────────────────────────────────────────
+function renderCompetitor(d) {
+  const comps = (d.competitors||[]).map(c=>`
+    <div style="padding:16px;border:1px solid #e2e8f0;border-radius:10px;margin-bottom:12px">
+      <div style="font-size:14px;font-weight:700;color:#101010;margin-bottom:4px">${c.name}</div>
+      <div style="font-size:12px;color:#666;margin-bottom:8px;font-style:italic">"${c.tagline||''}"</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <span class="chip chip-green">${c.audience||''}</span>
+        <span class="chip chip-amber">${c.pricing||''}</span>
+      </div>
+      <div style="font-size:12px;color:#374151;margin-top:8px"><strong>Strength:</strong> ${c.strength||''}</div>
+    </div>
+  `).join('');
+
+  const gaps = (d.market_gaps||[]).map(g=>`
+    <div style="padding:14px;border-left:3px solid #0bb4aa;background:#f0fdfc;border-radius:0 8px 8px 0;margin-bottom:10px">
+      <div style="font-size:13px;font-weight:600;color:#101010">${g.gap}</div>
+      <div style="font-size:12px;color:#0bb4aa;margin-top:4px">→ Opportunity: ${g.opportunity}</div>
+    </div>
+  `).join('');
+
+  return `
+    <div style="display:flex;flex-direction:column;gap:16px">
+      ${d.is_dummy?dummyBanner():''}
+      <div class="card" style="padding:24px"><h3 style="font-size:14px;font-weight:700;margin:0 0 16px">Competitive Landscape</h3>${comps}</div>
+      <div class="card" style="padding:24px">
+        <h3 style="font-size:14px;font-weight:700;margin:0 0 16px">Market Gaps</h3>${gaps}
+      </div>
+      <div class="card" style="padding:24px">
+        <h3 style="font-size:14px;font-weight:700;margin:0 0 12px">Positioning Recommendation</h3>
+        <p style="font-size:14px;color:#374151;line-height:1.7;margin:0">${d.positioning_recommendation||''}</p>
+      </div>
+    </div>`;
+}
+
+// ── Ad Copy ───────────────────────────────────────────────────────────────────
+function renderAdCopy(d) {
+  function copyPill(text) {
+    return `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:12px">
+      <span style="color:#101010">${text.text||text.intro||text.primary||text}</span>
+      <span style="color:#aaa;font-size:11px;white-space:nowrap">${text.chars||0} ch</span>
+    </div>`;
+  }
+  let sections = '';
+  if (d.google) {
+    const hl = (d.google.headlines||[]).map(h=>`<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;margin-bottom:6px;display:flex;justify-content:space-between"><span style="font-size:13px">${h.text}</span><span style="font-size:11px;color:#aaa">${h.chars} ch</span></div>`).join('');
+    const ds = (d.google.descriptions||[]).map(h=>`<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;margin-bottom:6px;display:flex;justify-content:space-between"><span style="font-size:13px">${h.text}</span><span style="font-size:11px;color:#aaa">${h.chars} ch</span></div>`).join('');
+    sections += `<div class="card" style="padding:24px;margin-bottom:16px"><h3 style="font-size:14px;font-weight:700;margin:0 0 16px">🔵 Google Ads (RSA)</h3><p style="font-size:12px;color:#888;margin:0 0 10px;font-weight:600">HEADLINES (≤30 ch each)</p>${hl}<p style="font-size:12px;color:#888;margin:12px 0 10px;font-weight:600">DESCRIPTIONS (≤90 ch)</p>${ds}</div>`;
+  }
+  if (d.meta) {
+    const vs = (d.meta||[]).map(v=>`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin-bottom:10px"><div style="font-size:11px;font-weight:700;color:#0bb4aa;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">${v.variation}</div><p style="font-size:13px;margin:0 0 8px">${v.primary||''}</p><div style="display:flex;gap:8px;flex-wrap:wrap"><span class="chip chip-green">${v.headline||''}</span><span class="chip chip-amber">CTA: ${v.cta||''}</span></div></div>`).join('');
+    sections += `<div class="card" style="padding:24px;margin-bottom:16px"><h3 style="font-size:14px;font-weight:700;margin:0 0 16px">🔷 Meta Ads</h3>${vs}</div>`;
+  }
+  if (d.linkedin) {
+    const vs = (d.linkedin||[]).map(v=>`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin-bottom:10px"><div style="font-size:11px;font-weight:700;color:#0077b6;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">${v.variation}</div><p style="font-size:13px;margin:0 0 8px">${v.intro||''}</p><div class="chip chip-green">${v.headline||''}</div></div>`).join('');
+    sections += `<div class="card" style="padding:24px;margin-bottom:16px"><h3 style="font-size:14px;font-weight:700;margin:0 0 16px">🔵 LinkedIn Ads</h3>${vs}</div>`;
+  }
+  return `${d.is_dummy?dummyBanner():''}${sections}`;
+}
+
+// ── Lead Qual ─────────────────────────────────────────────────────────────────
+function renderLeadQual(d) {
+  const leads = (d.leads||[]).map(l => {
+    const fitClass = 'fit-' + (l.icp_fit||'low').toLowerCase();
+    const signals  = (l.signals||[]).map(s=>`<div style="font-size:12px;color:#059669">${s}</div>`).join('');
+    const flags    = (l.red_flags||[]).map(s=>`<div style="font-size:12px;color:#dc2626">${s}</div>`).join('');
+    return `
+      <div style="border:1px solid #e2e8f0;border-radius:10px;padding:18px;margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+          <div>
+            <div style="font-size:14px;font-weight:700;color:#101010">${l.name||''}</div>
+            <div style="font-size:12px;color:#666">${l.email||''} · ${l.company||''}</div>
+            <div style="font-size:12px;color:#888;margin-top:2px">${l.role||''} · ${l.company_size||''} · ${l.industry||''}</div>
+          </div>
+          <div style="text-align:right">
+            <div class="icp-badge ${fitClass}" style="margin-bottom:4px">${l.icp_fit||''}</div>
+            <div style="font-size:18px;font-weight:800;color:#101010">${l.score||0}</div>
+            <div style="font-size:10px;color:#888">/100</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+          <div>${signals}</div><div>${flags}</div>
+        </div>
+        <div style="background:#f0fdfc;border-radius:8px;padding:10px 12px;font-size:12px;color:#0bb4aa;font-weight:600">
+          → ${l.next_step||''}
+        </div>
+      </div>`;
+  }).join('');
+  return `${d.is_dummy?dummyBanner():''}
+    <div class="card" style="padding:24px">
+      <h3 style="font-size:14px;font-weight:700;margin:0 0 4px">ICP Qualification Results</h3>
+      <p style="font-size:12px;color:#888;margin:0 0 20px">ICP: ${d.icp||''}</p>
+      ${leads}
+    </div>`;
+}
+
+// ── CWV ───────────────────────────────────────────────────────────────────────
+function renderCWV(d) {
+  const m = d.metrics||{};
+  const g = d.grades||{};
+  function metricCard(name, val, unit, grade) {
+    const label = grade==='good'?'Good':grade==='needs-improvement'?'Needs Improvement':'Poor';
+    const color = grade==='good'?'#059669':grade==='needs-improvement'?'#b45309':'#dc2626';
+    return `<div style="text-align:center;padding:16px;border:1px solid #e2e8f0;border-radius:10px">
+      <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">${name}</div>
+      <div style="font-size:24px;font-weight:800;color:${color}">${val}${unit}</div>
+      <div style="font-size:11px;font-weight:600;color:${color};margin-top:4px">${label}</div>
+    </div>`;
+  }
+  const diag = (d.diagnosis||[]).map(item=>`
+    <div style="border:1px solid #e2e8f0;border-radius:10px;padding:16px;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <span style="font-size:11px;font-weight:700;color:#0bb4aa;background:#e6fdfb;padding:2px 10px;border-radius:9999px">${item.metric}</span>
+        <span style="font-size:11px;color:#888">Priority ${item.priority} · ${item.effort}</span>
+      </div>
+      <div style="font-size:13px;font-weight:600;color:#101010;margin-bottom:6px">${item.root_cause||''}</div>
+      <div style="background:#f0fdfc;border-radius:8px;padding:10px;font-size:12px;color:#374151"><strong>Fix:</strong> ${item.fix||''}</div>
+    </div>
+  `).join('');
+  return `
+    <div style="display:flex;flex-direction:column;gap:16px">
+      ${d.is_dummy?dummyBanner():''}
+      <div class="card" style="padding:24px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+          <div><h3 style="font-size:14px;font-weight:700;margin:0">Core Web Vitals</h3><p style="font-size:12px;color:#888;margin:4px 0 0">${d.url||''} · ${d.strategy||'mobile'}</p></div>
+          <div style="font-size:28px;font-weight:800;color:#101010">${m.psi_score||0}<span style="font-size:13px;color:#888">/100</span></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+          ${metricCard('LCP', ((m.psi_lcp_ms||0)/1000).toFixed(1), 's', g.lcp||'poor')}
+          ${metricCard('INP', m.psi_inp_ms||0, 'ms', g.inp||'poor')}
+          ${metricCard('CLS', (m.psi_cls||0).toFixed(2), '', g.cls||'poor')}
+        </div>
+      </div>
+      <div class="card" style="padding:24px"><h3 style="font-size:14px;font-weight:700;margin:0 0 16px">Diagnosis & Fixes</h3>${diag}</div>
+      ${d.monitoring_query?`<div class="card" style="padding:24px"><h3 style="font-size:14px;font-weight:700;margin:0 0 12px">BigQuery Monitoring Query</h3><pre>${d.monitoring_query}</pre></div>`:''}
+    </div>`;
+}
+
+// ── UTM ───────────────────────────────────────────────────────────────────────
+function renderUTM(d) {
+  const conv = d.naming_convention||{};
+  const convRows = Object.entries(conv).map(([k,v])=>`
+    <tr style="border-bottom:1px solid #f1f5f9">
+      <td style="padding:10px 14px;font-size:13px;font-weight:700;color:#0bb4aa;white-space:nowrap">${k}</td>
+      <td style="padding:10px 14px;font-size:13px;color:#374151">${v}</td>
+    </tr>`).join('');
+  const groups = (d.channel_groupings||[]).map(g=>`
+    <div style="padding:10px 0;border-bottom:1px solid #f1f5f9;display:flex;gap:12px">
+      <span style="font-size:13px;font-weight:600;color:#101010;min-width:130px">${g.ga4_channel}</span>
+      <code style="font-size:12px;color:#374151;background:#f8fafc;padding:2px 8px;border-radius:4px">${g.rules}</code>
+    </div>`).join('');
+  const examples = (d.example_urls||[]).map(e=>`
+    <div style="margin-bottom:12px">
+      <div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:4px">${e.label}</div>
+      <code style="font-size:11px;color:#0bb4aa;word-break:break-all">${e.url}</code>
+    </div>`).join('');
+  const rules = (d.validation_rules||[]).map(r=>`<li style="font-size:13px;color:#374151;margin-bottom:6px">${r}</li>`).join('');
+  return `
+    <div style="display:flex;flex-direction:column;gap:16px">
+      ${d.is_dummy?dummyBanner():''}
+      <div class="card" style="padding:24px"><h3 style="font-size:14px;font-weight:700;margin:0 0 16px">Naming Convention</h3><table style="width:100%;border-collapse:collapse"><tbody>${convRows}</tbody></table></div>
+      <div class="card" style="padding:24px"><h3 style="font-size:14px;font-weight:700;margin:0 0 16px">GA4 Channel Groupings</h3>${groups}</div>
+      <div class="card" style="padding:24px"><h3 style="font-size:14px;font-weight:700;margin:0 0 16px">Example URLs</h3>${examples}</div>
+      <div class="card" style="padding:24px"><h3 style="font-size:14px;font-weight:700;margin:0 0 12px">Validation Rules</h3><ul style="padding-left:18px;margin:0">${rules}</ul></div>
+      ${d.bigquery_validation?`<div class="card" style="padding:24px"><h3 style="font-size:14px;font-weight:700;margin:0 0 12px">BigQuery Validation</h3><pre>${d.bigquery_validation}</pre></div>`:''}
+    </div>`;
+}
+
+// ── Conversion ────────────────────────────────────────────────────────────────
+function renderConversion(d) {
+  const causes = (d.likely_causes||[]).map(c=>{
+    const pcolor = c.probability==='High'?'#dc2626':c.probability==='Medium'?'#b45309':'#059669';
+    return `<div style="padding:12px 0;border-bottom:1px solid #f1f5f9;display:flex;gap:12px;align-items:flex-start">
+      <div style="width:24px;height:24px;border-radius:50%;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;color:#555">${c.rank}</div>
+      <div style="flex:1"><div style="font-size:13px;color:#101010">${c.cause}</div></div>
+      <span style="font-size:11px;font-weight:700;color:${pcolor};white-space:nowrap">${c.probability}</span>
+    </div>`;
+  }).join('');
+  const steps = (d.diagnosis_steps||[]).map(s=>`
+    <div style="display:flex;gap:12px;padding:10px 0;border-bottom:1px solid #f1f5f9">
+      <div style="width:24px;height:24px;border-radius:50%;background:#e6fdfb;color:#0bb4aa;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">${s.step}</div>
+      <div style="font-size:13px;color:#374151;padding-top:2px">${s.action}</div>
+    </div>`).join('');
+  const fixes = (d.fixes||[]).map(f=>`
+    <div style="border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin-bottom:10px">
+      <div style="font-size:13px;font-weight:600;color:#101010;margin-bottom:8px">${f.fix}</div>
+      ${f.code?`<pre style="margin:0;font-size:11px">${f.code}</pre>`:''}
+    </div>`).join('');
+  const queries = (d.bigquery_queries||[]).map(q=>`
+    <div style="margin-bottom:16px"><div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:6px">${q.label}</div><pre style="margin:0">${q.sql}</pre></div>`).join('');
+  return `
+    <div style="display:flex;flex-direction:column;gap:16px">
+      ${d.is_dummy?dummyBanner():''}
+      <div class="card" style="padding:24px">
+        <h3 style="font-size:14px;font-weight:700;margin:0 0 6px">Issue Summary</h3>
+        <p style="font-size:13px;color:#374151;margin:0 0 20px">${d.issue_summary||''}</p>
+        <h3 style="font-size:14px;font-weight:700;margin:0 0 12px">Likely Causes</h3>
+        ${causes}
+      </div>
+      <div class="card" style="padding:24px"><h3 style="font-size:14px;font-weight:700;margin:0 0 12px">Diagnosis Steps</h3>${steps}</div>
+      <div class="card" style="padding:24px"><h3 style="font-size:14px;font-weight:700;margin:0 0 12px">Fixes</h3>${fixes}</div>
+      ${queries?`<div class="card" style="padding:24px"><h3 style="font-size:14px;font-weight:700;margin:0 0 12px">BigQuery Queries</h3>${queries}</div>`:''}
+    </div>`;
+}
+
+// ── Generic fallback ──────────────────────────────────────────────────────────
+function genericRender(d) {
+  return `<div class="card" style="padding:24px">${d.is_dummy?dummyBanner():''}<pre>${JSON.stringify(d,null,2)}</pre></div>`;
+}
+
+function dummyBanner() {
+  return `<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;font-size:12px;color:#b45309;font-weight:600;margin-bottom:4px">
+    ⚡ Dummy data — for testing and calibration only. Run with a real URL to get live results.
+  </div>`;
+}
+
+init();
+</script>
+</body>
+</html>

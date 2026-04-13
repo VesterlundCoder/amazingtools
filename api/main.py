@@ -40,6 +40,7 @@ import entity_extractor
 import vision_client
 import sub_agents
 import memory_client
+import marketing_agents
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -135,6 +136,19 @@ def init_db():
                 wp_url          TEXT,
                 wp_user         TEXT,
                 wp_app_password TEXT
+            )
+        """))
+    with engine.begin() as conn:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS agent_jobs (
+                id           TEXT PRIMARY KEY,
+                agent        TEXT NOT NULL,
+                status       TEXT NOT NULL DEFAULT 'pending',
+                input_data   TEXT,
+                result       TEXT,
+                error        TEXT,
+                created_at   TEXT NOT NULL,
+                completed_at TEXT
             )
         """))
     for col in ["analysis"]:
@@ -1790,6 +1804,106 @@ def remove_managed_site(site_url: str):
     except Exception:
         pass
     return None
+
+
+# ── Marketing Agents endpoints ────────────────────────────────────────────────
+
+class AgentRunRequest(BaseModel):
+    agent:     str
+    input:     dict
+    use_dummy: bool = False
+
+
+def _execute_agent(job_id: str, agent_id: str, input_data: dict, use_dummy: bool):
+    """Run a marketing agent in a background thread and persist result."""
+    try:
+        with db_lock:
+            with engine.begin() as conn:
+                conn.execute(text(
+                    "UPDATE agent_jobs SET status='running' WHERE id=:id"
+                ), {"id": job_id})
+
+        cls = marketing_agents.AGENT_REGISTRY.get(agent_id)
+        if cls is None:
+            raise ValueError(f"Unknown agent: {agent_id}")
+
+        result = cls.run(input_data, use_dummy=use_dummy)
+        now    = datetime.now(timezone.utc).isoformat()
+
+        with db_lock:
+            with engine.begin() as conn:
+                conn.execute(text(
+                    "UPDATE agent_jobs SET status='done', result=:r, completed_at=:t WHERE id=:id"
+                ), {"r": json.dumps(result, ensure_ascii=False), "t": now, "id": job_id})
+
+    except Exception as e:
+        logger.error("[agent %s] Failed: %s", agent_id, e)
+        with db_lock:
+            with engine.begin() as conn:
+                conn.execute(text(
+                    "UPDATE agent_jobs SET status='error', error=:e WHERE id=:id"
+                ), {"e": str(e), "id": job_id})
+
+
+@app.get("/api/agents/list")
+def agents_list():
+    """Return metadata for all available marketing agents."""
+    return marketing_agents.list_agents()
+
+
+@app.post("/api/agents/run")
+def agents_run(req: AgentRunRequest, background_tasks: BackgroundTasks):
+    """Start a marketing agent job (async)."""
+    if req.agent not in marketing_agents.AGENT_REGISTRY:
+        raise HTTPException(status_code=400, detail=f"Unknown agent '{req.agent}'")
+    job_id = str(uuid.uuid4())
+    now    = datetime.now(timezone.utc).isoformat()
+    with db_lock:
+        with engine.begin() as conn:
+            conn.execute(text(
+                "INSERT INTO agent_jobs (id, agent, status, input_data, created_at) "
+                "VALUES (:id, :ag, 'pending', :inp, :now)"
+            ), {"id": job_id, "ag": req.agent,
+                "inp": json.dumps(req.input, ensure_ascii=False), "now": now})
+    background_tasks.add_task(_execute_agent, job_id, req.agent, req.input, req.use_dummy)
+    return {"job_id": job_id, "agent": req.agent}
+
+
+@app.get("/api/agents/jobs/{job_id}")
+def agents_job_get(job_id: str):
+    """Poll agent job status and result."""
+    with engine.connect() as conn:
+        row = conn.execute(
+            text("SELECT * FROM agent_jobs WHERE id = :id"), {"id": job_id}
+        ).mappings().fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Job not found")
+    r = dict(row)
+    if r.get("result"):
+        try:
+            r["result"] = json.loads(r["result"])
+        except Exception:
+            pass
+    return r
+
+
+@app.get("/api/agents/jobs")
+def agents_jobs_list(limit: int = 20, agent: Optional[str] = None):
+    """List recent agent jobs."""
+    with engine.connect() as conn:
+        if agent:
+            rows = conn.execute(
+                text("SELECT id, agent, status, created_at, completed_at FROM agent_jobs "
+                     "WHERE agent=:ag ORDER BY created_at DESC LIMIT :lim"),
+                {"ag": agent, "lim": limit},
+            ).mappings().fetchall()
+        else:
+            rows = conn.execute(
+                text("SELECT id, agent, status, created_at, completed_at FROM agent_jobs "
+                     "ORDER BY created_at DESC LIMIT :lim"),
+                {"lim": limit},
+            ).mappings().fetchall()
+    return [dict(r) for r in rows]
 
 
 @app.get("/api/wp/status")

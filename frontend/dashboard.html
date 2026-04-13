@@ -38,6 +38,7 @@
     <div class="flex items-center gap-6">
       <a href="seo-crawler.html" class="nav-link">SEO Crawler</a>
       <a href="query-match.html" class="nav-link">QueryMatch</a>
+      <a href="agents.html"      class="nav-link">Agents</a>
       <a href="ipr-sandbox.html" class="nav-link">IPR Sandbox</a>
       <button class="logout-btn" onclick="logout()">Log out</button>
     </div>
@@ -57,6 +58,19 @@
   <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#aaa;margin-bottom:16px">Available Tools</p>
 
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px">
+
+    <!-- Marketing Agents (active) -->
+    <a href="agents.html" class="tool-card">
+      <div class="tool-icon icon-teal">🤖</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <h2 style="font-size:16px;font-weight:700;color:#101010;margin:0">Marketing Agents</h2>
+        <span class="badge-active">Active</span>
+      </div>
+      <p style="font-size:13px;color:#666;line-height:1.6;margin:0">
+        Seven AI marketing agents: Landing Page Reviewer, Competitor Analyst, Ad Copy Writer, Lead Qualifier, CWV Auditor, UTM Builder, and Conversion Debugger.
+      </p>
+      <div style="margin-top:16px;font-size:13px;font-weight:600;color:#0bb4aa">Open agents →</div>
+    </a>
 
     <!-- SEO Crawler (active) -->
     <a href="seo-crawler.html" class="tool-card">
@@ -147,6 +161,7 @@
 
 <script>
   const API_BASE = 'https://web-production-c14f30.up.railway.app';
+  const AGENT_BASE = API_BASE;
 
   /* Auth guard */
   if (!sessionStorage.getItem('at_auth')) window.location.href = 'login.html';
