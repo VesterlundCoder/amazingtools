@@ -1,11 +1,13 @@
 """
-aiv_pipeline.py — Simplified AI Visibility pipeline for Amazing Tools.
+aiv_pipeline.py — AI Visibility pipeline for Amazing Tools.
 
-No SBERT / no Ahrefs dependencies. Uses GPT-4o-mini throughout.
+No SBERT / no Ahrefs dependencies. Uses the configured model throughout.
 
 Steps:
-  1. Generate N Swedish prompts per persona × service combination (GPT-4o-mini)
-  2. Run each prompt through OpenAI to capture AI response text (GPT-4o-mini)
+  1. Generate N Swedish prompts per persona using 4 types:
+       - how_to, recommendation, comparison, brand_recommendation
+     Brand-specific prompts (~35%) directly name the client/competitors.
+  2. Run each prompt through OpenAI to capture AI response text
   3. Detect brand mentions using case-insensitive string matching
   4. Compute KPIs: mention rate, Share of Voice, by-persona / by-service breakdown
   5. Identify visibility gaps and return JSON result
@@ -39,16 +41,61 @@ def _normalize_domain(url: str) -> str:
         return ""
 
 
+def _build_brand_prompts(
+    client_name: str,
+    competitor_names: list[str],
+    services: list[str],
+    region: str,
+    persona: str,
+) -> list[dict]:
+    """Hard-coded brand-specific prompts that directly name the client/competitors."""
+    prompts = []
+    all_brands = [client_name] + competitor_names[:2]
+    for svc in services[:2]:
+        # Direct recommendation prompt for client
+        prompts.append({
+            "prompt_type": "brand_recommendation",
+            "final_text": (
+                f"Skulle du rekommendera {client_name} för {svc} i {region}? "
+                f"Om inte, varför? Vilka andra leverantörer skulle du i så fall rekommendera?"
+            ),
+            "service": svc,
+        })
+        # Comparison prompt if competitors exist
+        if competitor_names:
+            comp = competitor_names[0]
+            prompts.append({
+                "prompt_type": "comparison",
+                "final_text": (
+                    f"Hur skiljer sig {client_name} från {comp} när det gäller {svc}? "
+                    f"Vilken är bäst för ett {persona}-perspektiv i {region}?"
+                ),
+                "service": svc,
+            })
+        # Alternative/market prompt
+        prompts.append({
+            "prompt_type": "recommendation",
+            "final_text": (
+                f"Vilka {svc}-leverantörer rekommenderar du för {persona} i {region}? "
+                f"Inkludera gärna {client_name} i jämförelsen."
+            ),
+            "service": svc,
+        })
+    return prompts
+
+
 def _generate_prompts(
     client_name: str,
     client_url: str,
+    competitor_names: list[str],
     personas: list[str],
     services: list[str],
     regions: list[str],
     num_per_persona: int,
 ) -> list[dict]:
-    """Use GPT-4o-mini to generate realistic B2B Swedish queries."""
+    """Generate prompts: ~35% brand-specific + ~65% AI-generated generic/how-to."""
     oai = _client()
+    model = os.environ.get("OPENAI_CHAT_MODEL", "gpt-4o-mini")
     all_prompts: list[dict] = []
     prompt_id = 0
 
@@ -56,60 +103,82 @@ def _generate_prompts(
         region_str = regions[0] if regions else "Sverige"
         service_str = ", ".join(services) if services else "tjänster"
 
+        # ── Part A: brand-specific hard-coded prompts (~35%) ──────────────────
+        brand_ps = _build_brand_prompts(client_name, competitor_names, services, region_str, persona)
+        # Keep at most 35% of total budget as brand prompts
+        brand_budget = max(2, round(num_per_persona * 0.35))
+        for bp in brand_ps[:brand_budget]:
+            all_prompts.append({
+                "prompt_id":   f"P{prompt_id:03d}",
+                "persona":     persona,
+                "region":      region_str,
+                **bp,
+            })
+            prompt_id += 1
+
+        # ── Part B: AI-generated generic prompts (~65%) ───────────────────────
+        generic_n = num_per_persona - min(len(brand_ps), brand_budget)
         system = (
-            "Du genererar realistiska svenska B2B-frågor som en beslutsfattare skulle ställa till ChatGPT. "
-            "Svara ENBART med ett JSON-objekt: {\"prompts\": [\"fråga 1\", \"fråga 2\", ...]}. "
-            "Frågorna ska variera: informationsfrågor, jämförelsefrågor och beslutsfrågor."
+            "Du genererar realistiska svenska B2B-frågor som en beslutsfattare (\"" + persona + "\") "
+            "skulle ställa till en AI-assistent när de söker leverantörer. "
+            "Svara ENBART med ett JSON-objekt: {\"prompts\": [\"fråga 1\", ...]}. "
+            "Blanda: hur-gör-man-frågor (how_to), jämförelsefrågor (comparison) och "
+            "rekommendationsfrågor (recommendation). Nämn gärna "
+            + client_name + " eller tjänstekategorin i några av frågorna."
         )
         user = (
             f"Persona: {persona}\n"
             f"Tjänster: {service_str}\n"
             f"Region: {region_str}\n"
-            f"Generera {num_per_persona} frågor."
+            f"Generera {generic_n} frågor."
         )
         try:
             resp = oai.chat.completions.create(
-                model="gpt-4o-mini",
+                model=model,
                 messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
-                max_tokens=1200,
+                max_tokens=1400,
                 temperature=0.8,
                 response_format={"type": "json_object"},
             )
             data = json.loads(resp.choices[0].message.content)
-            for q in data.get("prompts", [])[:num_per_persona]:
-                service = services[prompt_id % len(services)] if services else ""
+            for i, q in enumerate(data.get("prompts", [])[:generic_n]):
+                svc = services[i % len(services)] if services else ""
                 all_prompts.append({
-                    "prompt_id": f"P{prompt_id:03d}",
-                    "persona": persona,
-                    "service": service,
-                    "region": region_str,
-                    "final_text": str(q),
+                    "prompt_id":   f"P{prompt_id:03d}",
+                    "persona":     persona,
+                    "service":     svc,
+                    "region":      region_str,
+                    "prompt_type": "generic",
+                    "final_text":  str(q),
                 })
                 prompt_id += 1
         except Exception as e:
-            logger.warning("Prompt generation failed for persona %s: %s", persona, e)
+            logger.warning("Generic prompt generation failed for persona %s: %s", persona, e)
 
     return all_prompts
 
 
 def _run_visibility(prompts: list[dict]) -> list[dict]:
-    """Run each prompt through GPT-4o-mini and record the answer text."""
+    """Run each prompt through the model and record the answer text."""
     oai = _client()
+    model = os.environ.get("OPENAI_CHAT_MODEL", "gpt-4o-mini")
     results = []
+    system_msg = (
+        "Du är en AI-assistent med god kunskap om den svenska B2B-marknaden, leverantörer, "
+        "tjänsteföretag och branscher. När du svarar på frågor om leverantörer eller tjänster "
+        "namnger du konkreta aktörer du känner till. Svara alltid på svenska och ge "
+        "välgrundade, specifika svar."
+    )
     for p in prompts:
         try:
             resp = oai.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{
-                    "role": "user",
-                    "content": (
-                        "Svara på svenska. Du pratar med en beslutsfattare i B2B. "
-                        "Ge ett hjälpsamt och informativt svar.\n\n"
-                        f"Fråga: {p['final_text']}"
-                    )
-                }],
-                max_tokens=400,
-                temperature=0.7,
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_msg},
+                    {"role": "user",   "content": p["final_text"]},
+                ],
+                max_tokens=500,
+                temperature=0.6,
             )
             answer = resp.choices[0].message.content or ""
         except Exception as e:
@@ -117,18 +186,35 @@ def _run_visibility(prompts: list[dict]) -> list[dict]:
             logger.warning("Visibility check failed for %s: %s", p["prompt_id"], e)
 
         results.append({**p, "answer_text": answer})
-        time.sleep(0.3)  # basic rate limiting
+        time.sleep(0.25)
 
     return results
 
 
+def _brand_tokens(name: str) -> list[str]:
+    """Return a list of strings, any of which counts as a mention of this brand."""
+    tokens = [name.lower()]
+    # Strip legal suffixes so "Amazing Group AB" also matches "Amazing Group"
+    cleaned = re.sub(r"\s+(ab|hb|kb|as|inc|ltd|gmbh|llc|bv|oy)\.?$", "", name, flags=re.IGNORECASE).strip()
+    if cleaned.lower() != name.lower():
+        tokens.append(cleaned.lower())
+    # First two words as abbreviation (e.g. "Amazing Group")
+    parts = cleaned.split()
+    if len(parts) >= 2:
+        tokens.append(" ".join(parts[:2]).lower())
+    return list(dict.fromkeys(tokens))
+
+
 def _detect_mentions(results: list[dict], brand_names: list[str]) -> list[dict]:
     """Add boolean mention flags per brand to each result row."""
+    brand_token_map = {b: _brand_tokens(b) for b in brand_names}
     out = []
     for r in results:
         text_lower = r["answer_text"].lower()
-        flags = {f"mentions_{b.lower().replace(' ', '_')}": b.lower() in text_lower
-                 for b in brand_names}
+        flags = {
+            f"mentions_{b.lower().replace(' ', '_')}": any(t in text_lower for t in toks)
+            for b, toks in brand_token_map.items()
+        }
         out.append({**r, **flags})
     return out
 
@@ -240,9 +326,10 @@ def run_aiv_pipeline(
 
     logger.info("[AIV] Starting run %s — %d prompts × %d personas", run_id, num_prompts, len(personas))
 
-    # Step 1 — generate prompts
+    # Step 1 — generate prompts (brand-specific + generic mix)
     prompts = _generate_prompts(
         client_name=client_name, client_url=client_url,
+        competitor_names=competitor_names,
         personas=personas or ["Decision Maker"],
         services=services or ["main service"],
         regions=regions or ["Sweden"],
