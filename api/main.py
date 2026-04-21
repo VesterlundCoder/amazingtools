@@ -49,6 +49,7 @@ DB_PATH             = os.environ.get("DB_PATH", "jobs.db")
 OPENAI_BASE_URL     = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
 OPENAI_CHAT_MODEL   = os.environ.get("OPENAI_CHAT_MODEL", "gpt-4o")
 OPENAI_MINI_MODEL   = os.environ.get("OPENAI_MINI_MODEL", "gpt-4o-mini")
+OPENAI_EMBED_MODEL  = os.environ.get("OPENAI_EMBED_MODEL", "text-embedding-3-small")
 
 
 # ── Database (SQLAlchemy — SQLite locally, PostgreSQL on Railway) ─────────────
@@ -607,7 +608,7 @@ async def semantic_analysis(req: SemanticRequest):
 
     try:
         emb = oai.embeddings.create(
-            model="text-embedding-3-small",
+            model=OPENAI_EMBED_MODEL,
             input=[req.query] + texts,
         )
     except Exception as e:

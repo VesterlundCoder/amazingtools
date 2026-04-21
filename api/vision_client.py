@@ -13,12 +13,14 @@ import logging
 import time
 from typing import Optional
 
+import os
+
 import httpx
 from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
-_VISION_MODEL = "gpt-4o"
+_VISION_MODEL = os.environ.get("OPENAI_VISION_MODEL", "gpt-4o")
 _MAX_ALT_LEN  = 125
 
 
@@ -51,7 +53,7 @@ def generate_alt_text(
         return None
 
     try:
-        oai = OpenAI(api_key=api_key)
+        oai = OpenAI(api_key=api_key, base_url=os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1"))
         resp = oai.chat.completions.create(
             model=_VISION_MODEL,
             messages=[{
