@@ -12,13 +12,19 @@ import argparse, json, time, sys, re
 from typing import Any
 import urllib.request, urllib.error
 
-BASE_URL = "https://web-production-c14f30.up.railway.app"
+_parser = argparse.ArgumentParser(description="Amazing Tools audit bot")
+_parser.add_argument("--base-url", default="https://web-production-c14f30.up.railway.app")
+_parser.add_argument("--frontend-url", default="", help="Static frontend base URL (e.g. https://amazingtools.se)")
+_args = _parser.parse_args()
+BASE_URL = _args.base_url.rstrip("/")
 FRONTEND_PAGES = [
     "dashboard.html", "agents.html", "agent-runner.html",
     "seo-crawler.html", "query-match.html", "brand-voice.html",
     "mevo-ai.html", "aiv-dashboard.html", "ipr-sandbox.html",
     "client.html", "client-workspace.html", "login.html",
 ]
+# Frontend is served separately (cpanel/static host) — set via --frontend-url
+FRONTEND_BASE = _args.frontend_url.rstrip("/") if _args.frontend_url else ""
 
 bugs: list[dict] = []
 passed: list[str] = []
@@ -324,25 +330,36 @@ if code == 200 and isinstance(jobs, list):
 else:
     bug("MEDIUM", "SEO Crawler", f"GET /api/jobs failed: {code}")
 
-code, hist = _request("GET", "/api/seo-history?limit=5")
+code, hist = _request("GET", "/api/history?limit=5")
 if code == 200:
-    ok("GET /api/seo-history → OK")
+    ok("GET /api/history → OK")
 else:
-    bug("LOW", "SEO Crawler", f"GET /api/seo-history failed: {code}")
+    bug("LOW", "SEO Crawler", f"GET /api/history failed: {code}")
 
 
 # ── 11. Frontend pages (check they're served / not 404) ───────────────────────
-section("11. Frontend pages (HTTP check via Railway)")
+section("11. Frontend pages (HTTP check)")
 
-FRONTEND_BASE = BASE_URL  # Railway serves frontend from same domain
-for page in FRONTEND_PAGES:
-    code, _ = _request("GET", f"/{page}")
-    if code in (200, 304):
-        ok(f"/{page} → {code}")
-    elif code == 404:
-        bug("MEDIUM", "Frontend", f"/{page} → 404 (page not deployed or wrong path)")
-    else:
-        bug("LOW", "Frontend", f"/{page} → unexpected {code}")
+if FRONTEND_BASE:
+    for page in FRONTEND_PAGES:
+        fb_url = FRONTEND_BASE.rstrip('/') + '/' + page
+        req2 = urllib.request.Request(fb_url)
+        try:
+            with urllib.request.urlopen(req2, timeout=15) as r2:
+                code2 = r2.status
+        except urllib.error.HTTPError as e:
+            code2 = e.code
+        except Exception as e:
+            code2 = 0
+        if code2 in (200, 304):
+            ok(f"{page} → {code2}")
+        elif code2 == 404:
+            bug("MEDIUM", "Frontend", f"{page} → 404 (not found at {fb_url})")
+        else:
+            bug("LOW", "Frontend", f"{page} → {code2}")
+else:
+    print("  ⚠️  Frontend URL not set — skipping HTML page checks.")
+    print("     Run with --frontend-url https://yoursite.com to enable.")
 
 
 # ── 12. Agent run (smoke test with dummy) ────────────────────────────────────

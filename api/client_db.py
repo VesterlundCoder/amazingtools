@@ -16,6 +16,21 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _migrate(db: sqlite3.Connection):
+    """Apply any missing column migrations to existing tables."""
+    migrations = [
+        ("ac_customers", "pinned_tools", "TEXT DEFAULT '[]'"),
+    ]
+    cur = db.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    tables = {r[0] for r in cur.fetchall()}
+    for table, col, typedef in migrations:
+        if table not in tables:
+            continue
+        cols = {r[1] for r in db.execute(f"PRAGMA table_info({table})").fetchall()}
+        if col not in cols:
+            db.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typedef}")
+
+
 def init_client_db():
     with _conn() as db:
         db.executescript("""
@@ -83,6 +98,7 @@ def init_client_db():
             FOREIGN KEY (customer_id) REFERENCES ac_customers(id)
         );
         """)
+        _migrate(db)
 
 
 # ── Customers ────────────────────────────────────────────────────────────────
