@@ -1636,7 +1636,7 @@ def analyze_job(job_id: str, apply_actions: bool = True):
             {"role": "system", "content": "Du är en expert SEO-konsult som ger konkreta, handlingsinriktade råd på svenska."},
             {"role": "user",   "content": prompt},
         ],
-        max_tokens=3000,
+        max_tokens=1500,
         temperature=0.4,
     )
 
