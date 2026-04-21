@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Brand Voice Agent — Amazing Tools</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config={theme:{extend:{fontFamily:{sans:['Inter','sans-serif']}}}}</script>
+  <style>
+    *{font-family:'Inter',sans-serif}
+    body{background:#f8fafc;color:#101010}
+    .nav-link{color:#555;font-size:14px;font-weight:500;transition:color .15s;text-decoration:none}
+    .nav-link:hover,.nav-link.active{color:#0bb4aa}
+    .logout-btn{background:none;border:1px solid #e2e8f0;color:#555;padding:6px 14px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer}
+    .logout-btn:hover{border-color:#0bb4aa;color:#0bb4aa}
+    .card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;box-shadow:0 2px 10px rgba(0,0,0,.05)}
+    .btn-primary{background:#0bb4aa;color:#fff;border:none;border-radius:9px;padding:11px 22px;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s}
+    .btn-primary:hover{background:#059e95;transform:translateY(-1px);box-shadow:0 4px 14px rgba(11,180,170,.3)}
+    .btn-primary:disabled{background:#a7f3d0;cursor:not-allowed;transform:none;box-shadow:none}
+    .btn-ghost{background:none;border:1px solid #e2e8f0;color:#555;border-radius:9px;padding:9px 18px;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s}
+    .btn-ghost:hover{border-color:#0bb4aa;color:#0bb4aa}
+    .input-field{border:1px solid #e2e8f0;border-radius:9px;padding:10px 14px;font-size:13px;outline:none;width:100%;transition:border .15s;background:#fff}
+    .input-field:focus{border-color:#0bb4aa;box-shadow:0 0 0 3px rgba(11,180,170,.1)}
+    .step-badge{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:#0bb4aa;color:#fff;font-size:13px;font-weight:700;flex-shrink:0}
+    .step-locked .step-badge{background:#e2e8f0;color:#999}
+    .step-locked{opacity:.55;pointer-events:none}
+    .dim-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid #f1f5f9}
+    .dim-row:last-child{border-bottom:none}
+    .dim-label{font-size:12px;font-weight:600;color:#555;width:160px;flex-shrink:0}
+    .bar-wrap{flex:1;background:#e2e8f0;border-radius:4px;height:8px;overflow:hidden;position:relative}
+    .bar-target{position:absolute;top:0;height:100%;background:#0bb4aa;border-radius:4px;transition:width .5s}
+    .bar-actual{position:absolute;top:0;height:100%;background:#f59e0b;border-radius:4px;opacity:.7;transition:width .5s}
+    .dim-val{font-size:11px;font-weight:700;color:#0bb4aa;width:34px;text-align:right;flex-shrink:0}
+    .qa-pill{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
+    .qa-ok{background:#dcfce7;color:#16a34a}
+    .qa-fail{background:#fee2e2;color:#dc2626}
+    .dot-pulse{display:inline-flex;gap:4px;align-items:center}
+    .dot-pulse span{width:6px;height:6px;border-radius:50%;background:#0bb4aa;animation:pulse 1.4s ease-in-out infinite}
+    .dot-pulse span:nth-child(2){animation-delay:.2s}
+    .dot-pulse span:nth-child(3){animation-delay:.4s}
+    @keyframes pulse{0%,80%,100%{opacity:.2;transform:scale(.85)}40%{opacity:1;transform:scale(1)}}
+    .tag-req{background:#e6fdfb;color:#0aa098;padding:3px 8px;border-radius:5px;font-size:11px;font-weight:600}
+    .tag-tab{background:#fef9c3;color:#ca8a04;padding:3px 8px;border-radius:5px;font-size:11px;font-weight:600}
+    .div-high{color:#dc2626;font-weight:700}
+    .div-med{color:#f59e0b;font-weight:700}
+    .div-low{color:#16a34a;font-weight:700}
+    .rewrite-box{background:#f0fdfc;border:1px solid #b2ede9;border-radius:10px;padding:16px 18px;font-size:13px;line-height:1.75;color:#101010;white-space:pre-wrap}
+    .sample-input{border:1px solid #e2e8f0;border-radius:9px;padding:10px 14px;font-size:13px;width:100%;resize:vertical;line-height:1.6;background:#fff;outline:none;transition:border .15s;min-height:80px}
+    .sample-input:focus{border-color:#0bb4aa;box-shadow:0 0 0 3px rgba(11,180,170,.1)}
+  </style>
+</head>
+<body class="min-h-screen">
+
+<nav style="background:#fff;border-bottom:1px solid #e2e8f0;position:sticky;top:0;z-index:50">
+  <div class="max-w-5xl mx-auto px-6 flex items-center justify-between" style="height:60px">
+    <a href="dashboard.html" style="font-weight:800;font-size:18px;color:#101010;text-decoration:none;letter-spacing:-0.5px">
+      Amazing <span style="color:#0bb4aa">Tools</span>
+    </a>
+    <div class="flex items-center gap-6">
+      <a href="seo-crawler.html" class="nav-link">SEO Crawler</a>
+      <a href="query-match.html" class="nav-link">QueryMatch</a>
+      <a href="brand-voice.html" class="nav-link active" style="color:#0bb4aa">Brand Voice</a>
+      <button class="logout-btn" onclick="logout()">Log out</button>
+    </div>
+  </div>
+</nav>
+
+<!-- Hero -->
+<div style="background:linear-gradient(135deg,#f0fdfc 0%,#fff 60%);border-bottom:1px solid #e2e8f0;padding:40px 0 34px">
+  <div class="max-w-5xl mx-auto px-6">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+      <span style="font-size:1.9rem">🎙️</span>
+      <h1 style="font-size:1.9rem;font-weight:800;color:#101010;letter-spacing:-0.8px;margin:0">
+        Brand <span style="color:#0bb4aa">Voice Agent</span>
+      </h1>
+    </div>
+    <p style="font-size:14px;color:#666;max-width:580px;line-height:1.6">
+      Three AI subagents working in sequence: <strong>Build</strong> a 10-dimension voice vector from sample brand texts, 
+      <strong>Audit</strong> any copy against the profile, and <strong>Rewrite</strong> it to match.
+      Profile is saved in your browser and persists across sessions.
+    </p>
+    <div style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap">
+      <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;color:#555">
+        🧮 <span style="color:#0bb4aa">v1–v10</span> Voice Vector Space
+      </div>
+      <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;color:#555">
+        📐 Weighted Divergence Scoring
+      </div>
+      <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;color:#555">
+        ✅ QA Constraint Checker
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="max-w-5xl mx-auto px-6 py-10" style="display:flex;flex-direction:column;gap:24px">
+
+  <!-- ═══ MODULE 1: BUILDER ══════════════════════════════════════════════════ -->
+  <div class="card" id="module-build" style="padding:28px">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+      <span class="step-badge">1</span>
+      <div>
+        <h2 style="font-size:16px;font-weight:700;margin:0 0 2px">Brand Voice Model Builder</h2>
+        <p style="font-size:12px;color:#888;margin:0">Paste 1–5 sample brand texts → generates the 12-dimensional Target Voice Vector v*</p>
+      </div>
+      <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+        <span id="profile-status" style="font-size:11px;font-weight:700;color:#888">No profile loaded</span>
+        <button class="btn-ghost" style="font-size:11px;padding:5px 12px" onclick="clearProfile()">Clear</button>
+      </div>
+    </div>
+
+    <!-- Brand name -->
+    <div style="margin-bottom:14px;max-width:360px">
+      <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#888;display:block;margin-bottom:6px">Brand Name</label>
+      <input id="brand-name" class="input-field" placeholder="e.g. Amazing Group" style="max-width:360px"/>
+    </div>
+
+    <!-- Sample inputs -->
+    <div style="margin-bottom:16px">
+      <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#888;display:block;margin-bottom:8px">
+        Sample Brand Texts <span style="color:#0bb4aa;font-weight:600">(1–5)</span>
+      </label>
+      <div id="samples-wrap" style="display:flex;flex-direction:column;gap:8px">
+        <textarea class="sample-input" id="sample-0" placeholder="Paste brand text sample 1 — e.g. homepage hero, About page, product description…" rows="3"></textarea>
+      </div>
+      <button class="btn-ghost" style="font-size:12px;padding:5px 12px;margin-top:8px" onclick="addSample()">+ Add sample</button>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:14px">
+      <button class="btn-primary" id="build-btn" onclick="runBuilder()">⚙️ Build Voice Profile</button>
+      <div id="build-loading" style="display:none"><div class="dot-pulse"><span></span><span></span><span></span></div></div>
+      <span id="build-error" style="font-size:12px;color:#dc2626;display:none"></span>
+    </div>
+
+    <!-- Voice vector result -->
+    <div id="build-result" style="display:none;margin-top:24px;border-top:1px solid #e2e8f0;padding-top:20px">
+      <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:16px;flex-wrap:wrap">
+        <h3 style="font-size:14px;font-weight:700;margin:0" id="result-brand-name">Voice Profile</h3>
+        <p id="result-summary" style="font-size:13px;color:#666;margin:0;flex:1;min-width:200px"></p>
+      </div>
+      <!-- Dimension bars -->
+      <div id="dims-output" style="margin-bottom:16px"></div>
+      <!-- Lexical -->
+      <div style="display:flex;gap:24px;flex-wrap:wrap">
+        <div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#888;letter-spacing:.06em;margin-bottom:6px">Required Vocab</div>
+          <div id="lexical-req" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#888;letter-spacing:.06em;margin-bottom:6px">Taboo Phrases</div>
+          <div id="lexical-tab" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+        </div>
+      </div>
+      <div style="margin-top:16px">
+        <button class="btn-primary" style="font-size:12px;padding:7px 16px" onclick="useProfileForAudit()">Use this profile → Audit text</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ MODULE 2: AUDITOR ══════════════════════════════════════════════════ -->
+  <div class="card" id="module-audit" style="padding:28px">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+      <span class="step-badge" id="audit-badge">2</span>
+      <div>
+        <h2 style="font-size:16px;font-weight:700;margin:0 0 2px">Audit Engine</h2>
+        <p style="font-size:12px;color:#888;margin:0">Calculates divergence Δv between the target voice vector v* and actual measured text vector</p>
+      </div>
+    </div>
+
+    <div style="margin-bottom:14px">
+      <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#888;display:block;margin-bottom:6px">Text to Audit</label>
+      <textarea id="audit-text" class="sample-input" rows="6" placeholder="Paste copy to audit — blog post, landing page hero, email, product description…" style="min-height:120px"></textarea>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:14px">
+      <button class="btn-primary" id="audit-btn" onclick="runAudit()">🔍 Audit Text</button>
+      <div id="audit-loading" style="display:none"><div class="dot-pulse"><span></span><span></span><span></span></div></div>
+      <span id="audit-error" style="font-size:12px;color:#dc2626;display:none"></span>
+    </div>
+
+    <!-- Audit result -->
+    <div id="audit-result" style="display:none;margin-top:24px;border-top:1px solid #e2e8f0;padding-top:20px">
+      <!-- Score banner -->
+      <div id="audit-banner" style="border-radius:10px;padding:14px 18px;margin-bottom:20px">
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          <div id="audit-score-big" style="font-size:2.2rem;font-weight:900;letter-spacing:-1px"></div>
+          <div>
+            <div id="audit-verdict" style="font-size:15px;font-weight:700;margin-bottom:3px"></div>
+            <div id="audit-feedback" style="font-size:13px;color:#666;max-width:500px;line-height:1.5"></div>
+          </div>
+        </div>
+      </div>
+      <!-- Dimension delta bars -->
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#888;margin-bottom:10px">Dimension Analysis</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 32px" id="audit-dims"></div>
+      <!-- Use for rewrite -->
+      <div style="margin-top:16px">
+        <button class="btn-primary" style="font-size:12px;padding:7px 16px" onclick="useAuditForRewrite()">Use this audit → Rewrite text</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ MODULE 3: REWRITER ════════════════════════════════════════════════ -->
+  <div class="card" id="module-rewrite" style="padding:28px">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+      <span class="step-badge" id="rewrite-badge">3</span>
+      <div>
+        <h2 style="font-size:16px;font-weight:700;margin:0 0 2px">Rewrite Engine</h2>
+        <p style="font-size:12px;color:#888;margin:0">Solves the constrained optimization: minimize distance to v* while preserving semantics, respecting lexical boundaries</p>
+      </div>
+    </div>
+
+    <div style="margin-bottom:14px">
+      <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#888;display:block;margin-bottom:6px">Text to Rewrite</label>
+      <textarea id="rewrite-text" class="sample-input" rows="6" placeholder="Paste the text to rewrite (pre-filled from Audit if you click the button above)" style="min-height:120px"></textarea>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:14px">
+      <button class="btn-primary" id="rewrite-btn" onclick="runRewrite()">✍️ Rewrite to Brand Voice</button>
+      <div id="rewrite-loading" style="display:none"><div class="dot-pulse"><span></span><span></span><span></span></div></div>
+      <span id="rewrite-error" style="font-size:12px;color:#dc2626;display:none"></span>
+    </div>
+
+    <!-- Rewrite result -->
+    <div id="rewrite-result" style="display:none;margin-top:24px;border-top:1px solid #e2e8f0;padding-top:20px">
+      <!-- QA strip -->
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+        <span style="font-size:12px;font-weight:700;color:#555">QA Checks:</span>
+        <span class="qa-pill" id="qa-semantic"></span>
+        <span class="qa-pill" id="qa-taboo"></span>
+        <span class="qa-pill" id="qa-length"></span>
+        <span class="qa-pill" id="qa-overall" style="font-size:12px;padding:4px 12px"></span>
+      </div>
+      <div id="rewrite-changes" style="font-size:12px;color:#666;margin-bottom:12px;font-style:italic"></div>
+      <div id="rewrite-output" class="rewrite-box"></div>
+      <div style="margin-top:12px;display:flex;gap:10px">
+        <button class="btn-ghost" style="font-size:12px;padding:6px 14px" onclick="copyRewrite()">📋 Copy</button>
+        <button class="btn-ghost" style="font-size:12px;padding:6px 14px" onclick="sendToAudit()">🔄 Re-audit →</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer style="border-top:1px solid #e2e8f0;padding:20px 0;margin-top:10px">
+  <div class="max-w-5xl mx-auto px-6 flex justify-between items-center">
+    <span style="font-size:12px;color:#aaa">Amazing Tools · Brand Voice Agent</span>
+    <span style="font-size:12px;color:#aaa">Powered by Qwen 2.5 · v1.0</span>
+  </div>
+</footer>
+
+<script>
+const API_BASE = 'https://web-production-c14f30.up.railway.app';
+
+if (!sessionStorage.getItem('at_auth')) window.location.href = 'login.html';
+function logout() { sessionStorage.removeItem('at_auth'); window.location.href = 'login.html'; }
+
+const DIMS = [
+  {key:'v1_authority',       label:'Authority',         lo:'Peer',    hi:'Expert'},
+  {key:'v2_warmth',          label:'Warmth',            lo:'Clinical',hi:'Empathetic'},
+  {key:'v3_formality',       label:'Formality',         lo:'Casual',  hi:'Academic'},
+  {key:'v4_energy',          label:'Energy',            lo:'Placid',  hi:'Kinetic'},
+  {key:'v5_persuasiveness',  label:'Persuasiveness',    lo:'Passive', hi:'Urgent'},
+  {key:'v6_emotionality',    label:'Emotionality',      lo:'Stoic',   hi:'Expressive'},
+  {key:'v7_specificity',     label:'Specificity',       lo:'Abstract',hi:'Concrete'},
+  {key:'v8_jargon',          label:'Jargon',            lo:'Layman',  hi:'Specialist'},
+  {key:'v9_syntax_complexity',label:'Syntax',           lo:'Staccato',hi:'Flowing'},
+  {key:'v10_pov',            label:'POV',               lo:'We',      hi:'You'},
+];
+
+let _profile     = null;  // current brand voice profile
+let _lastAudit   = null;  // last audit result
+let _sampleCount = 1;
+
+/* ── Persist profile in localStorage ─────────────────────────────────────── */
+function loadStoredProfile() {
+  try {
+    const s = localStorage.getItem('bva_profile');
+    if (s) { _profile = JSON.parse(s); updateProfileStatus(); }
+  } catch {}
+}
+function saveProfile(p) {
+  _profile = p;
+  localStorage.setItem('bva_profile', JSON.stringify(p));
+  updateProfileStatus();
+}
+function clearProfile() {
+  _profile = null; _lastAudit = null;
+  localStorage.removeItem('bva_profile');
+  updateProfileStatus();
+  document.getElementById('build-result').style.display = 'none';
+  document.getElementById('audit-result').style.display = 'none';
+  document.getElementById('rewrite-result').style.display = 'none';
+}
+function updateProfileStatus() {
+  const el = document.getElementById('profile-status');
+  if (_profile) {
+    el.textContent = `✓ ${_profile.brand_name || 'Profile'} loaded`;
+    el.style.color = '#0bb4aa';
+  } else {
+    el.textContent = 'No profile loaded';
+    el.style.color = '#888';
+  }
+}
+
+/* ── Sample management ────────────────────────────────────────────────────── */
+function addSample() {
+  if (_sampleCount >= 5) return;
+  const w = document.getElementById('samples-wrap');
+  const ta = document.createElement('textarea');
+  ta.className = 'sample-input';
+  ta.id = `sample-${_sampleCount}`;
+  ta.placeholder = `Paste brand text sample ${_sampleCount + 1}…`;
+  ta.rows = 3;
+  w.appendChild(ta);
+  _sampleCount++;
+  if (_sampleCount >= 5) document.querySelector('[onclick="addSample()"]').style.display = 'none';
+}
+
+function getSamples() {
+  const out = [];
+  for (let i = 0; i < _sampleCount; i++) {
+    const v = (document.getElementById(`sample-${i}`) || {}).value?.trim();
+    if (v) out.push(v);
+  }
+  return out;
+}
+
+/* ── Dimension bar renderer ───────────────────────────────────────────────── */
+function renderDimBars(containerId, targetVec, actualVec) {
+  const el = document.getElementById(containerId);
+  el.innerHTML = DIMS.map(d => {
+    const t = (targetVec[d.key] ?? 0);
+    const a = actualVec ? (actualVec[d.key] ?? 0) : null;
+    const pct = v => Math.round(v * 100);
+    return `<div class="dim-row">
+      <div class="dim-label" title="${d.lo} → ${d.hi}">${d.label}</div>
+      <div class="bar-wrap">
+        <div class="bar-target" style="width:${pct(t)}%"></div>
+        ${a !== null ? `<div class="bar-actual" style="width:${pct(a)}%"></div>` : ''}
+      </div>
+      <div class="dim-val">${pct(t)}%</div>
+    </div>`;
+  }).join('');
+}
+
+function renderAuditDims(data) {
+  const dims = data.dimension_analysis || [];
+  const target = _profile?.vector || {};
+  const actual = data.actual_vector || {};
+  const el = document.getElementById('audit-dims');
+  el.innerHTML = DIMS.map(d => {
+    const row = dims.find(r => r.key === d.key) || {};
+    const t = (target[d.key] ?? 0);
+    const a = (actual[d.key] ?? 0);
+    const delta = t - a;
+    const sign  = delta > 0 ? '▲' : delta < 0 ? '▼' : '—';
+    const col   = Math.abs(delta) > 0.3 ? '#dc2626' : Math.abs(delta) > 0.15 ? '#f59e0b' : '#16a34a';
+    return `<div class="dim-row" style="align-items:flex-start;flex-direction:column;gap:3px;padding:8px 0">
+      <div style="display:flex;align-items:center;justify-content:space-between;width:100%">
+        <span style="font-size:12px;font-weight:700;color:#333">${d.label}</span>
+        <span style="font-size:11px;font-weight:800;color:${col}">${sign} ${(Math.abs(delta)*100).toFixed(0)}%</span>
+      </div>
+      <div style="display:flex;width:100%;gap:6px;align-items:center">
+        <div class="bar-wrap" style="height:6px">
+          <div class="bar-target" style="width:${Math.round(t*100)}%"></div>
+          <div class="bar-actual" style="width:${Math.round(a*100)}%"></div>
+        </div>
+      </div>
+      ${row.note ? `<div style="font-size:11px;color:#888;font-style:italic;line-height:1.4">${row.note}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+/* ── Module 1: Builder ────────────────────────────────────────────────────── */
+async function runBuilder() {
+  const samples = getSamples();
+  if (!samples.length) { alert('Paste at least one sample text.'); return; }
+  const brandName = document.getElementById('brand-name').value.trim();
+
+  const btn = document.getElementById('build-btn');
+  btn.disabled = true;
+  document.getElementById('build-loading').style.display = '';
+  document.getElementById('build-error').style.display = 'none';
+
+  try {
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 120000);
+    const r = await fetch(`${API_BASE}/api/brand-voice/build`, {
+      method:'POST', signal: ctrl.signal,
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ brand_name: brandName, sample_texts: samples }),
+    });
+    clearTimeout(tid);
+    if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.detail || `HTTP ${r.status}`); }
+    const data = await r.json();
+    saveProfile(data);
+    renderBuilderResult(data);
+  } catch(e) {
+    document.getElementById('build-error').textContent = e.name === 'AbortError' ? 'Timed out — try with shorter texts.' : e.message;
+    document.getElementById('build-error').style.display = '';
+  } finally {
+    btn.disabled = false;
+    document.getElementById('build-loading').style.display = 'none';
+  }
+}
+
+function renderBuilderResult(data) {
+  document.getElementById('result-brand-name').textContent = data.brand_name || 'Voice Profile';
+  document.getElementById('result-summary').textContent = data.summary || '';
+  renderDimBars('dims-output', data.vector || {}, null);
+  const req = document.getElementById('lexical-req');
+  const tab = document.getElementById('lexical-tab');
+  req.innerHTML = (data.lexical?.required || []).map(w => `<span class="tag-req">${w}</span>`).join('');
+  tab.innerHTML = (data.lexical?.taboo   || []).map(w => `<span class="tag-tab">${w}</span>`).join('');
+  document.getElementById('build-result').style.display = '';
+}
+
+function useProfileForAudit() {
+  document.getElementById('module-audit').scrollIntoView({behavior:'smooth'});
+}
+
+/* ── Module 2: Auditor ────────────────────────────────────────────────────── */
+async function runAudit() {
+  if (!_profile) { alert('Build a brand voice profile first (Step 1).'); return; }
+  const text = document.getElementById('audit-text').value.trim();
+  if (!text) { alert('Paste text to audit.'); return; }
+
+  const btn = document.getElementById('audit-btn');
+  btn.disabled = true;
+  document.getElementById('audit-loading').style.display = '';
+  document.getElementById('audit-error').style.display = 'none';
+
+  try {
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 120000);
+    const r = await fetch(`${API_BASE}/api/brand-voice/audit`, {
+      method:'POST', signal: ctrl.signal,
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ text, profile: _profile }),
+    });
+    clearTimeout(tid);
+    if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.detail || `HTTP ${r.status}`); }
+    const data = await r.json();
+    _lastAudit = data;
+    renderAuditResult(data);
+  } catch(e) {
+    document.getElementById('audit-error').textContent = e.name === 'AbortError' ? 'Timed out.' : e.message;
+    document.getElementById('audit-error').style.display = '';
+  } finally {
+    btn.disabled = false;
+    document.getElementById('audit-loading').style.display = 'none';
+  }
+}
+
+function renderAuditResult(data) {
+  const score = data.divergence_score ?? 0;
+  const pct   = Math.round(score * 100);
+  const banner= document.getElementById('audit-banner');
+  let   color, label;
+  if (score < 0.25)      { color = '#dcfce7'; label = '✅ On-Brand'; }
+  else if (score < 0.45) { color = '#fef9c3'; label = '⚠️ Minor Drift'; }
+  else                   { color = '#fee2e2'; label = '🚨 Off-Brand'; }
+  banner.style.background = color;
+  banner.style.border = `1px solid ${score < 0.25 ? '#86efac' : score < 0.45 ? '#fde047' : '#fca5a5'}`;
+  document.getElementById('audit-score-big').textContent = pct + '%';
+  document.getElementById('audit-score-big').style.color = score < 0.25 ? '#16a34a' : score < 0.45 ? '#ca8a04' : '#dc2626';
+  document.getElementById('audit-verdict').textContent = label;
+  document.getElementById('audit-feedback').textContent = data.overall_feedback || '';
+  renderAuditDims(data);
+  document.getElementById('audit-result').style.display = '';
+}
+
+function useAuditForRewrite() {
+  document.getElementById('rewrite-text').value = document.getElementById('audit-text').value;
+  document.getElementById('module-rewrite').scrollIntoView({behavior:'smooth'});
+}
+
+/* ── Module 3: Rewriter ───────────────────────────────────────────────────── */
+async function runRewrite() {
+  if (!_profile) { alert('Build a brand voice profile first (Step 1).'); return; }
+  const text = document.getElementById('rewrite-text').value.trim();
+  if (!text) { alert('Paste text to rewrite.'); return; }
+
+  const btn = document.getElementById('rewrite-btn');
+  btn.disabled = true;
+  document.getElementById('rewrite-loading').style.display = '';
+  document.getElementById('rewrite-error').style.display = 'none';
+
+  try {
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 180000);
+    const r = await fetch(`${API_BASE}/api/brand-voice/rewrite`, {
+      method:'POST', signal: ctrl.signal,
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ text, profile: _profile, audit_result: _lastAudit || {} }),
+    });
+    clearTimeout(tid);
+    if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.detail || `HTTP ${r.status}`); }
+    const data = await r.json();
+    renderRewriteResult(data);
+  } catch(e) {
+    document.getElementById('rewrite-error').textContent = e.name === 'AbortError' ? 'Timed out — try shorter text.' : e.message;
+    document.getElementById('rewrite-error').style.display = '';
+  } finally {
+    btn.disabled = false;
+    document.getElementById('rewrite-loading').style.display = 'none';
+  }
+}
+
+function qaChip(id, label, ok) {
+  const el = document.getElementById(id);
+  el.textContent = (ok ? '✓ ' : '✗ ') + label;
+  el.className = 'qa-pill ' + (ok ? 'qa-ok' : 'qa-fail');
+}
+
+function renderRewriteResult(data) {
+  const qa = data.qa || {};
+  qaChip('qa-semantic', 'Meaning preserved',    qa.semantic_preserved);
+  qaChip('qa-taboo',    'Taboo-free',           qa.taboo_clean);
+  qaChip('qa-length',   'Length OK',            qa.length_ok);
+  const el = document.getElementById('qa-overall');
+  el.textContent  = qa.qa_passed ? '✅ QA Passed' : '⚠️ QA Issues';
+  el.className    = 'qa-pill ' + (qa.qa_passed ? 'qa-ok' : 'qa-fail');
+  el.style.fontSize  = '12px'; el.style.padding = '4px 12px';
+  document.getElementById('rewrite-changes').textContent = data.changes_summary || '';
+  document.getElementById('rewrite-output').textContent  = data.rewritten || '';
+  document.getElementById('rewrite-result').style.display = '';
+}
+
+function copyRewrite() {
+  const txt = document.getElementById('rewrite-output').textContent;
+  navigator.clipboard.writeText(txt).then(() => alert('Copied!')).catch(() => alert('Copy failed'));
+}
+
+function sendToAudit() {
+  const txt = document.getElementById('rewrite-output').textContent;
+  document.getElementById('audit-text').value = txt;
+  document.getElementById('module-audit').scrollIntoView({behavior:'smooth'});
+}
+
+/* ── Init ─────────────────────────────────────────────────────────────────── */
+loadStoredProfile();
+if (_profile) renderBuilderResult(_profile);
+</script>
+</body>
+</html>

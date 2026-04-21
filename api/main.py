@@ -41,6 +41,7 @@ import vision_client
 import sub_agents
 import memory_client
 import marketing_agents
+import brand_voice_agent
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -270,6 +271,23 @@ class TextSemanticRequest(BaseModel):
     text:         str
     query:        str
     max_sections: int = 30
+
+
+class BrandVoiceBuildRequest(BaseModel):
+    brand_name:   str = ""
+    sample_texts: list[str]
+
+
+class BrandVoiceAuditRequest(BaseModel):
+    text:    str
+    profile: dict
+    weights: dict = {}
+
+
+class BrandVoiceRewriteRequest(BaseModel):
+    text:         str
+    profile:      dict
+    audit_result: dict = {}
 
 
 class RewriteRequest(BaseModel):
@@ -783,6 +801,62 @@ async def _ahrefs_get(path: str, params: dict, api_key: str) -> dict:
         )
     except Exception as e:
         raise HTTPException(502, detail=f"Ahrefs unreachable: {e}")
+
+
+# ── Brand Voice Agent endpoints ────────────────────────────────────────────
+
+@app.post("/api/brand-voice/build")
+async def brand_voice_build(req: BrandVoiceBuildRequest):
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        raise HTTPException(500, detail="OPENAI_API_KEY not configured.")
+    if not req.sample_texts or all(not t.strip() for t in req.sample_texts):
+        raise HTTPException(400, detail="Provide at least one sample text.")
+    try:
+        result = brand_voice_agent.build_voice_profile(
+            req.sample_texts, req.brand_name, api_key, OPENAI_BASE_URL, OPENAI_CHAT_MODEL
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(500, detail=f"Builder error: {e}")
+
+
+@app.post("/api/brand-voice/audit")
+async def brand_voice_audit(req: BrandVoiceAuditRequest):
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        raise HTTPException(500, detail="OPENAI_API_KEY not configured.")
+    if not req.text.strip():
+        raise HTTPException(400, detail="text is empty.")
+    if not req.profile.get("vector"):
+        raise HTTPException(400, detail="profile must contain a voice vector.")
+    try:
+        result = brand_voice_agent.audit_text(
+            req.text, req.profile, req.weights or None,
+            api_key, OPENAI_BASE_URL, OPENAI_CHAT_MODEL
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(500, detail=f"Auditor error: {e}")
+
+
+@app.post("/api/brand-voice/rewrite")
+async def brand_voice_rewrite(req: BrandVoiceRewriteRequest):
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        raise HTTPException(500, detail="OPENAI_API_KEY not configured.")
+    if not req.text.strip():
+        raise HTTPException(400, detail="text is empty.")
+    if not req.profile.get("vector"):
+        raise HTTPException(400, detail="profile must contain a voice vector.")
+    try:
+        result = brand_voice_agent.rewrite_text(
+            req.text, req.profile, req.audit_result or None,
+            api_key, OPENAI_BASE_URL, OPENAI_CHAT_MODEL
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(500, detail=f"Rewriter error: {e}")
 
 
 @app.post("/api/analyze/ahrefs")
