@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Amazing Client — Customer Hub</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config={theme:{extend:{fontFamily:{sans:['Inter','sans-serif']}}}}</script>
+  <style>
+    *{font-family:'Inter',sans-serif}
+    body{background:#f8fafc;color:#101010}
+    .nav-link{color:#555;font-size:14px;font-weight:500;text-decoration:none;transition:color .15s}
+    .nav-link:hover,.nav-link.active{color:#0bb4aa}
+    .logout-btn{background:none;border:1px solid #e2e8f0;color:#555;padding:6px 14px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer}
+    .logout-btn:hover{border-color:#0bb4aa;color:#0bb4aa}
+    .card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;box-shadow:0 2px 8px rgba(0,0,0,.05)}
+    .client-card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:22px 24px;cursor:pointer;transition:box-shadow .15s,transform .15s,border-color .15s;text-decoration:none;display:block}
+    .client-card:hover{box-shadow:0 6px 24px rgba(11,180,170,.12);transform:translateY(-2px);border-color:#b2ede9}
+    .btn-primary{background:#0bb4aa;color:#fff;border:none;border-radius:9px;padding:10px 20px;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s}
+    .btn-primary:hover{background:#059e95;box-shadow:0 4px 14px rgba(11,180,170,.3)}
+    .btn-ghost{background:none;border:1px solid #e2e8f0;color:#555;border-radius:9px;padding:8px 16px;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s}
+    .btn-ghost:hover{border-color:#0bb4aa;color:#0bb4aa}
+    .input-field{border:1px solid #e2e8f0;border-radius:9px;padding:9px 13px;font-size:13px;outline:none;width:100%;background:#fff;transition:border .15s}
+    .input-field:focus{border-color:#0bb4aa;box-shadow:0 0 0 3px rgba(11,180,170,.1)}
+    .badge{padding:2px 10px;border-radius:9999px;font-size:11px;font-weight:700}
+    .badge-advisory{background:#eff6ff;color:#3b82f6}
+    .badge-full{background:#e6fdfb;color:#0bb4aa}
+    .badge-onboarding{background:#fffbeb;color:#b45309}
+    .badge-active{background:#dcfce7;color:#16a34a}
+    .badge-paused{background:#f1f5f9;color:#888}
+    .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:50;display:flex;align-items:center;justify-content:center}
+    .modal{background:#fff;border-radius:16px;padding:32px;width:100%;max-width:540px;box-shadow:0 20px 60px rgba(0,0,0,.2);max-height:90vh;overflow-y:auto}
+    .search-input{border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px 10px 38px;font-size:13px;outline:none;width:100%;background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' viewBox='0 0 24 24' stroke='%23aaa' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z'/%3E%3C/svg%3E") no-repeat 12px center;transition:border .15s}
+    .search-input:focus{border-color:#0bb4aa;box-shadow:0 0 0 3px rgba(11,180,170,.1)}
+  </style>
+</head>
+<body class="min-h-screen">
+
+<nav style="background:#fff;border-bottom:1px solid #e2e8f0;position:sticky;top:0;z-index:40">
+  <div class="max-w-7xl mx-auto px-6 flex items-center justify-between" style="height:60px">
+    <a href="dashboard.html" style="font-weight:800;font-size:18px;color:#101010;text-decoration:none;letter-spacing:-0.5px">Amazing <span style="color:#0bb4aa">Tools</span></a>
+    <div class="flex items-center gap-6">
+      <a href="dashboard.html" class="nav-link">Tools</a>
+      <a href="agents.html" class="nav-link">Agents</a>
+      <a href="client.html" class="nav-link active" style="color:#0bb4aa">Amazing Client</a>
+      <button class="logout-btn" onclick="logout()">Log out</button>
+    </div>
+  </div>
+</nav>
+
+<!-- Hero -->
+<div style="background:linear-gradient(135deg,#f0fdfc 0%,#fff 60%);border-bottom:1px solid #e2e8f0;padding:36px 0 28px">
+  <div class="max-w-7xl mx-auto px-6 flex items-center justify-between flex-wrap gap-4">
+    <div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+        <span style="font-size:1.6rem">🏢</span>
+        <h1 style="font-size:1.7rem;font-weight:800;color:#101010;letter-spacing:-0.6px;margin:0">Amazing <span style="color:#0bb4aa">Client</span></h1>
+      </div>
+      <p style="font-size:13px;color:#666;margin:0">Customer-centric workspace. All tools, insights, tasks and MEVO — scoped to a client.</p>
+    </div>
+    <button class="btn-primary" onclick="openCreateModal()" style="display:flex;align-items:center;gap:7px">
+      <span style="font-size:16px">+</span> New Client
+    </button>
+  </div>
+</div>
+
+<div class="max-w-7xl mx-auto px-6 py-8">
+
+  <!-- Search + filter bar -->
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:24px;flex-wrap:wrap">
+    <div style="flex:1;min-width:200px;position:relative">
+      <input id="search-input" class="search-input" placeholder="Search clients…" oninput="renderClients()"/>
+    </div>
+    <select id="status-filter" class="input-field" style="width:auto;padding:9px 12px" onchange="renderClients()">
+      <option value="">All statuses</option>
+      <option value="ONBOARDING">Onboarding</option>
+      <option value="ACTIVE">Active</option>
+      <option value="PAUSED">Paused</option>
+    </select>
+    <select id="mode-filter" class="input-field" style="width:auto;padding:9px 12px" onchange="renderClients()">
+      <option value="">All modes</option>
+      <option value="ADVISORY">Advisory</option>
+      <option value="FULL_SERVICE">Full Service</option>
+    </select>
+  </div>
+
+  <!-- Stats row -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:28px" id="stats-row">
+    <div class="card" style="padding:16px 20px;text-align:center">
+      <div id="stat-total" style="font-size:26px;font-weight:800;color:#0bb4aa">—</div>
+      <div style="font-size:12px;color:#888;font-weight:600;margin-top:2px">Total Clients</div>
+    </div>
+    <div class="card" style="padding:16px 20px;text-align:center">
+      <div id="stat-active" style="font-size:26px;font-weight:800;color:#16a34a">—</div>
+      <div style="font-size:12px;color:#888;font-weight:600;margin-top:2px">Active</div>
+    </div>
+    <div class="card" style="padding:16px 20px;text-align:center">
+      <div id="stat-full" style="font-size:26px;font-weight:800;color:#0bb4aa">—</div>
+      <div style="font-size:12px;color:#888;font-weight:600;margin-top:2px">Full Service</div>
+    </div>
+    <div class="card" style="padding:16px 20px;text-align:center">
+      <div id="stat-onboarding" style="font-size:26px;font-weight:800;color:#b45309">—</div>
+      <div style="font-size:12px;color:#888;font-weight:600;margin-top:2px">Onboarding</div>
+    </div>
+  </div>
+
+  <!-- Client grid -->
+  <div id="clients-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:18px">
+    <div style="padding:40px;text-align:center;color:#aaa;font-size:14px;grid-column:1/-1">Loading clients…</div>
+  </div>
+
+</div>
+
+<!-- ── Create Modal ─────────────────────────────────────────────────────── -->
+<div id="create-modal" class="modal-bg" style="display:none" onclick="if(event.target===this)closeCreateModal()">
+  <div class="modal">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
+      <h2 style="font-size:18px;font-weight:800;margin:0">New Client</h2>
+      <button onclick="closeCreateModal()" style="background:none;border:none;font-size:20px;color:#888;cursor:pointer">×</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div>
+        <label style="font-size:11px;font-weight:700;text-transform:uppercase;color:#888;letter-spacing:.06em;display:block;margin-bottom:5px">Company Name *</label>
+        <input id="new-company" class="input-field" placeholder="Nordika Furniture AB"/>
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;text-transform:uppercase;color:#888;letter-spacing:.06em;display:block;margin-bottom:5px">Primary Domain</label>
+        <input id="new-domain" class="input-field" placeholder="nordikafurniture.se"/>
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;text-transform:uppercase;color:#888;letter-spacing:.06em;display:block;margin-bottom:5px">Industry</label>
+        <input id="new-industry" class="input-field" placeholder="E-commerce, B2B SaaS, Retail…"/>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div>
+          <label style="font-size:11px;font-weight:700;text-transform:uppercase;color:#888;letter-spacing:.06em;display:block;margin-bottom:5px">Service Mode</label>
+          <select id="new-mode" class="input-field">
+            <option value="ADVISORY">Advisory</option>
+            <option value="FULL_SERVICE">Full Service</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;text-transform:uppercase;color:#888;letter-spacing:.06em;display:block;margin-bottom:5px">Markets</label>
+          <input id="new-markets" class="input-field" placeholder="SE, NO, DK"/>
+        </div>
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;text-transform:uppercase;color:#888;letter-spacing:.06em;display:block;margin-bottom:5px">Competitors (comma-separated domains)</label>
+        <input id="new-competitors" class="input-field" placeholder="ikea.com, mio.se"/>
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;text-transform:uppercase;color:#888;letter-spacing:.06em;display:block;margin-bottom:5px">Primary Goal</label>
+        <input id="new-goal" class="input-field" placeholder="Increase organic traffic 40% in 12 months"/>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:24px;justify-content:flex-end">
+      <button class="btn-ghost" onclick="closeCreateModal()">Cancel</button>
+      <button class="btn-primary" onclick="submitCreate()">Create Client →</button>
+    </div>
+    <p id="create-error" style="font-size:12px;color:#dc2626;margin-top:8px;display:none"></p>
+  </div>
+</div>
+
+<script>
+const API = 'https://web-production-c14f30.up.railway.app';
+if (!sessionStorage.getItem('at_auth')) window.location.href = 'login.html';
+function logout(){ sessionStorage.removeItem('at_auth'); window.location.href='login.html'; }
+
+let _clients = [];
+
+async function loadClients() {
+  try {
+    const r = await fetch(`${API}/api/clients`);
+    _clients = await r.json();
+  } catch { _clients = []; }
+  renderClients();
+  updateStats();
+}
+
+function updateStats() {
+  document.getElementById('stat-total').textContent      = _clients.length;
+  document.getElementById('stat-active').textContent     = _clients.filter(c=>c.status==='ACTIVE').length;
+  document.getElementById('stat-full').textContent       = _clients.filter(c=>c.service_mode==='FULL_SERVICE').length;
+  document.getElementById('stat-onboarding').textContent = _clients.filter(c=>c.status==='ONBOARDING').length;
+}
+
+function renderClients() {
+  const q     = document.getElementById('search-input').value.toLowerCase();
+  const stat  = document.getElementById('status-filter').value;
+  const mode  = document.getElementById('mode-filter').value;
+  let list = _clients.filter(c => {
+    if (q && !c.company_name.toLowerCase().includes(q) && !(c.primary_domain||'').toLowerCase().includes(q)) return false;
+    if (stat && c.status !== stat) return false;
+    if (mode && c.service_mode !== mode) return false;
+    return true;
+  });
+
+  const grid = document.getElementById('clients-grid');
+  if (!list.length) {
+    grid.innerHTML = `<div style="padding:48px;text-align:center;color:#aaa;font-size:14px;grid-column:1/-1">
+      ${_clients.length ? 'No clients match your filter.' : 'No clients yet. Click <strong>+ New Client</strong> to get started.'}
+    </div>`;
+    return;
+  }
+
+  grid.innerHTML = list.map(c => {
+    const modeBadge  = c.service_mode === 'FULL_SERVICE'
+      ? `<span class="badge badge-full">Full Service</span>`
+      : `<span class="badge badge-advisory">Advisory</span>`;
+    const statBadge  = c.status === 'ACTIVE'
+      ? `<span class="badge badge-active">Active</span>`
+      : c.status === 'ONBOARDING'
+      ? `<span class="badge badge-onboarding">Onboarding</span>`
+      : `<span class="badge badge-paused">Paused</span>`;
+    const comps = (c.competitors||[]).slice(0,3).map(cp=>
+      `<span style="font-size:11px;color:#888;background:#f8fafc;padding:2px 7px;border-radius:4px;border:1px solid #e2e8f0">${typeof cp==='object'?cp.domain||cp.name:cp}</span>`
+    ).join('');
+    const goals = (c.goals||[]).slice(0,1).map(g=>
+      `<div style="font-size:12px;color:#555;font-style:italic;margin-top:6px">🎯 ${typeof g==='object'?g.title:g}</div>`
+    ).join('');
+    const markets = (c.markets||[]).join(', ');
+    const initials = c.company_name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+    return `
+      <a href="client-workspace.html?id=${c.id}" class="client-card">
+        <div style="display:flex;align-items:flex-start;gap:14px">
+          <div style="width:44px;height:44px;border-radius:12px;background:#e6fdfb;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#0bb4aa;flex-shrink:0">${initials}</div>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
+              <span style="font-size:15px;font-weight:700;color:#101010;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.company_name}</span>
+              ${modeBadge} ${statBadge}
+            </div>
+            <div style="font-size:12px;color:#888;margin-bottom:2px">${c.primary_domain||'—'} ${markets ? '· '+markets : ''}</div>
+            ${goals}
+          </div>
+        </div>
+        ${comps ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px">${comps}</div>` : ''}
+        <div style="margin-top:14px;font-size:12px;font-weight:600;color:#0bb4aa;display:flex;align-items:center;gap:4px">
+          Open workspace <span style="font-size:14px">→</span>
+        </div>
+      </a>`;
+  }).join('');
+}
+
+/* ── Create Modal ────────────────────────────────────────────────────────── */
+function openCreateModal() {
+  document.getElementById('create-modal').style.display = 'flex';
+  document.getElementById('new-company').focus();
+}
+function closeCreateModal() {
+  document.getElementById('create-modal').style.display = 'none';
+  ['new-company','new-domain','new-industry','new-markets','new-competitors','new-goal']
+    .forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('create-error').style.display = 'none';
+}
+
+async function submitCreate() {
+  const name = document.getElementById('new-company').value.trim();
+  if (!name) { showErr('Company name is required.'); return; }
+  const marketsRaw = document.getElementById('new-markets').value.trim();
+  const markets = marketsRaw ? marketsRaw.split(',').map(s=>s.trim()).filter(Boolean) : ['SE'];
+  const compsRaw = document.getElementById('new-competitors').value.trim();
+  const competitors = compsRaw ? compsRaw.split(',').map(s=>({domain:s.trim(),name:s.trim()})).filter(c=>c.domain) : [];
+  const goalRaw = document.getElementById('new-goal').value.trim();
+  const goals = goalRaw ? [{title: goalRaw}] : [];
+  const payload = {
+    company_name:   name,
+    primary_domain: document.getElementById('new-domain').value.trim(),
+    industry:       document.getElementById('new-industry').value.trim(),
+    service_mode:   document.getElementById('new-mode').value,
+    markets, competitors, goals,
+  };
+  try {
+    const r = await fetch(`${API}/api/clients`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) throw new Error((await r.json()).detail || 'Error');
+    const client = await r.json();
+    closeCreateModal();
+    window.location.href = `client-workspace.html?id=${client.id}`;
+  } catch(e) { showErr(e.message); }
+}
+
+function showErr(msg) {
+  const el = document.getElementById('create-error');
+  el.textContent = msg; el.style.display = '';
+}
+
+loadClients();
+</script>
+</body>
+</html>

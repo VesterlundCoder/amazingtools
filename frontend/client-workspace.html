@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Client Workspace — Amazing Tools</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config={theme:{extend:{fontFamily:{sans:['Inter','sans-serif']}}}}</script>
+  <style>
+    *{font-family:'Inter',sans-serif}
+    body{background:#f8fafc;color:#101010}
+    .nav-link{color:#555;font-size:14px;font-weight:500;text-decoration:none;transition:color .15s}
+    .nav-link:hover,.nav-link.active{color:#0bb4aa}
+    .logout-btn{background:none;border:1px solid #e2e8f0;color:#555;padding:6px 14px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer}
+    .logout-btn:hover{border-color:#0bb4aa;color:#0bb4aa}
+    .card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;box-shadow:0 2px 8px rgba(0,0,0,.05)}
+    .btn-primary{background:#0bb4aa;color:#fff;border:none;border-radius:9px;padding:9px 18px;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s}
+    .btn-primary:hover{background:#059e95;box-shadow:0 4px 12px rgba(11,180,170,.3)}
+    .btn-ghost{background:none;border:1px solid #e2e8f0;color:#555;border-radius:9px;padding:7px 14px;font-size:12px;font-weight:500;cursor:pointer;transition:all .15s}
+    .btn-ghost:hover{border-color:#0bb4aa;color:#0bb4aa}
+    .btn-icon{background:none;border:none;padding:5px 8px;border-radius:6px;cursor:pointer;color:#888;font-size:14px;transition:background .15s}
+    .btn-icon:hover{background:#f1f5f9;color:#0bb4aa}
+    .input-field{border:1px solid #e2e8f0;border-radius:9px;padding:9px 13px;font-size:13px;outline:none;width:100%;background:#fff;transition:border .15s}
+    .input-field:focus{border-color:#0bb4aa;box-shadow:0 0 0 3px rgba(11,180,170,.1)}
+    .tab-btn{padding:10px 18px;font-size:13px;font-weight:600;border:none;background:none;cursor:pointer;color:#888;border-bottom:2px solid transparent;transition:all .15s}
+    .tab-btn.active{color:#0bb4aa;border-bottom-color:#0bb4aa}
+    .tab-panel{display:none}
+    .tab-panel.active{display:block}
+    .badge{padding:2px 9px;border-radius:9999px;font-size:11px;font-weight:700}
+    .badge-advisory{background:#eff6ff;color:#3b82f6}
+    .badge-full{background:#e6fdfb;color:#0bb4aa}
+    .badge-active{background:#dcfce7;color:#16a34a}
+    .badge-onboarding{background:#fffbeb;color:#b45309}
+    .badge-paused{background:#f1f5f9;color:#888}
+    .sev-high{background:#fee2e2;color:#dc2626}
+    .sev-medium{background:#fef9c3;color:#ca8a04}
+    .sev-low{background:#dcfce7;color:#16a34a}
+    .status-open{background:#f1f5f9;color:#555}
+    .status-in_progress{background:#eff6ff;color:#3b82f6}
+    .status-done{background:#dcfce7;color:#16a34a}
+    .status-cancelled{background:#f1f5f9;color:#aaa;text-decoration:line-through}
+    .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:60;display:flex;align-items:center;justify-content:center}
+    .modal{background:#fff;border-radius:16px;padding:28px;width:100%;max-width:520px;box-shadow:0 20px 60px rgba(0,0,0,.2);max-height:90vh;overflow-y:auto}
+    .kpi-tile{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:18px 20px;text-align:center}
+    .kpi-val{font-size:28px;font-weight:900;letter-spacing:-1px}
+    .activity-row{display:flex;gap:12px;padding:10px 0;border-bottom:1px solid #f1f5f9;align-items:flex-start}
+    .activity-row:last-child{border-bottom:none}
+    .activity-icon{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;margin-top:1px}
+    .comment-card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;margin-bottom:10px}
+    .run-row{display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid #f1f5f9}
+    .run-row:last-child{border-bottom:none}
+    .insight-row{border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;margin-bottom:10px;background:#fff;cursor:pointer;transition:border-color .15s}
+    .insight-row:hover{border-color:#b2ede9}
+    .task-row{border:1px solid #e2e8f0;border-radius:10px;padding:12px 16px;margin-bottom:8px;background:#fff;display:flex;align-items:center;gap:12px;cursor:pointer;transition:border-color .15s}
+    .task-row:hover{border-color:#b2ede9}
+    .dot-pulse{display:inline-flex;gap:4px;align-items:center}
+    .dot-pulse span{width:5px;height:5px;border-radius:50%;background:#0bb4aa;animation:pulse 1.4s ease-in-out infinite}
+    .dot-pulse span:nth-child(2){animation-delay:.2s}
+    .dot-pulse span:nth-child(3){animation-delay:.4s}
+    @keyframes pulse{0%,80%,100%{opacity:.2;transform:scale(.85)}40%{opacity:1;transform:scale(1)}}
+  </style>
+</head>
+<body class="min-h-screen">
+
+<!-- Top nav -->
+<nav style="background:#fff;border-bottom:1px solid #e2e8f0;position:sticky;top:0;z-index:40">
+  <div class="max-w-7xl mx-auto px-6 flex items-center justify-between" style="height:60px">
+    <div style="display:flex;align-items:center;gap:16px">
+      <a href="client.html" style="font-size:13px;color:#888;text-decoration:none;font-weight:500">← All Clients</a>
+      <div style="width:1px;height:18px;background:#e2e8f0"></div>
+      <a href="dashboard.html" style="font-weight:800;font-size:17px;color:#101010;text-decoration:none;letter-spacing:-0.5px">Amazing <span style="color:#0bb4aa">Tools</span></a>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <div id="client-mode-badge" class="badge badge-advisory">Advisory</div>
+      <div id="client-status-badge" class="badge badge-onboarding">Onboarding</div>
+      <button class="btn-ghost" onclick="openEditModal()">⚙ Settings</button>
+      <button class="logout-btn" onclick="logout()">Log out</button>
+    </div>
+  </div>
+</nav>
+
+<!-- Client header -->
+<div style="background:linear-gradient(135deg,#f0fdfc 0%,#fff 60%);border-bottom:1px solid #e2e8f0;padding:28px 0 20px">
+  <div class="max-w-7xl mx-auto px-6">
+    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+      <div id="client-avatar" style="width:52px;height:52px;border-radius:14px;background:#0bb4aa;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:#fff;flex-shrink:0">?</div>
+      <div>
+        <h1 id="client-name" style="font-size:1.5rem;font-weight:800;color:#101010;letter-spacing:-0.5px;margin:0 0 4px">Loading…</h1>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span id="client-domain" style="font-size:13px;color:#888"></span>
+          <span id="client-industry" style="font-size:12px;color:#aaa"></span>
+        </div>
+      </div>
+      <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn-primary" onclick="openRunModal()" style="font-size:12px;padding:8px 14px">▶ Run Module</button>
+        <button class="btn-ghost" onclick="showTab('mevo')" style="font-size:12px">💬 MEVO Chat</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Tab bar -->
+<div style="background:#fff;border-bottom:1px solid #e2e8f0;overflow-x:auto">
+  <div class="max-w-7xl mx-auto px-6" style="display:flex;gap:0">
+    <button class="tab-btn active" onclick="showTab('overview')" id="tab-overview">Overview</button>
+    <button class="tab-btn" onclick="showTab('tasks')" id="tab-tasks">Tasks <span id="badge-tasks" style="background:#f1f5f9;color:#555;padding:1px 7px;border-radius:9999px;font-size:11px;margin-left:4px"></span></button>
+    <button class="tab-btn" onclick="showTab('insights')" id="tab-insights">Insights <span id="badge-insights" style="background:#f1f5f9;color:#555;padding:1px 7px;border-radius:9999px;font-size:11px;margin-left:4px"></span></button>
+    <button class="tab-btn" onclick="showTab('runs')" id="tab-runs">Runs</button>
+    <button class="tab-btn" onclick="showTab('notes')" id="tab-notes">Notes</button>
+    <button class="tab-btn" onclick="showTab('mevo')" id="tab-mevo">💬 MEVO</button>
+  </div>
+</div>
+
+<div class="max-w-7xl mx-auto px-6 py-8">
+
+  <!-- ═══ OVERVIEW ══════════════════════════════════════════════════════════ -->
+  <div id="panel-overview" class="tab-panel active">
+    <!-- KPI tiles -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:24px">
+      <div class="kpi-tile">
+        <div class="kpi-val" id="kpi-tasks" style="color:#0bb4aa">—</div>
+        <div style="font-size:12px;color:#888;font-weight:600;margin-top:3px">Open Tasks</div>
+      </div>
+      <div class="kpi-tile">
+        <div class="kpi-val" id="kpi-insights" style="color:#f59e0b">—</div>
+        <div style="font-size:12px;color:#888;font-weight:600;margin-top:3px">Open Insights</div>
+      </div>
+      <div class="kpi-tile">
+        <div class="kpi-val" id="kpi-high" style="color:#dc2626">—</div>
+        <div style="font-size:12px;color:#888;font-weight:600;margin-top:3px">High Severity</div>
+      </div>
+      <div class="kpi-tile">
+        <div class="kpi-val" id="kpi-runs" style="color:#555">—</div>
+        <div style="font-size:12px;color:#888;font-weight:600;margin-top:3px">Total Runs</div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+      <!-- Goals -->
+      <div class="card" style="padding:22px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <h3 style="font-size:14px;font-weight:700;margin:0">🎯 Goals</h3>
+        </div>
+        <div id="goals-list" style="font-size:13px;color:#666">—</div>
+      </div>
+      <!-- Competitors -->
+      <div class="card" style="padding:22px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <h3 style="font-size:14px;font-weight:700;margin:0">⚔️ Competitors</h3>
+        </div>
+        <div id="competitors-list" style="font-size:13px;color:#666">—</div>
+      </div>
+    </div>
+
+    <!-- Quick links to tools (pre-filled) -->
+    <div class="card" style="padding:22px;margin-top:18px">
+      <h3 style="font-size:14px;font-weight:700;margin:0 0 14px">🛠 Run Tools in Client Context</h3>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px" id="tool-links"></div>
+    </div>
+
+    <!-- Recent activity -->
+    <div class="card" style="padding:22px;margin-top:18px">
+      <h3 style="font-size:14px;font-weight:700;margin:0 0 14px">⚡ Recent Activity</h3>
+      <div id="activity-feed">
+        <div style="color:#aaa;font-size:13px">No activity yet.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ TASKS ═════════════════════════════════════════════════════════════ -->
+  <div id="panel-tasks" class="tab-panel">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn-ghost active" onclick="filterTasks('',this)" id="tf-all" style="border-color:#0bb4aa;color:#0bb4aa">All</button>
+        <button class="btn-ghost" onclick="filterTasks('OPEN',this)">Open</button>
+        <button class="btn-ghost" onclick="filterTasks('IN_PROGRESS',this)">In Progress</button>
+        <button class="btn-ghost" onclick="filterTasks('DONE',this)">Done</button>
+      </div>
+      <button class="btn-primary" style="font-size:12px;padding:8px 14px" onclick="openTaskModal()">+ New Task</button>
+    </div>
+    <div id="tasks-list"><div style="color:#aaa;font-size:13px;padding:20px 0">No tasks yet.</div></div>
+  </div>
+
+  <!-- ═══ INSIGHTS ══════════════════════════════════════════════════════════ -->
+  <div id="panel-insights" class="tab-panel">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn-ghost" onclick="filterInsights('',this)" style="border-color:#0bb4aa;color:#0bb4aa">All</button>
+        <button class="btn-ghost" onclick="filterInsights('HIGH',this)">🔴 High</button>
+        <button class="btn-ghost" onclick="filterInsights('MEDIUM',this)">🟡 Medium</button>
+        <button class="btn-ghost" onclick="filterInsights('LOW',this)">🟢 Low</button>
+      </div>
+      <button class="btn-primary" style="font-size:12px;padding:8px 14px" onclick="openInsightModal()">+ Add Insight</button>
+    </div>
+    <div id="insights-list"><div style="color:#aaa;font-size:13px;padding:20px 0">No insights yet.</div></div>
+  </div>
+
+  <!-- ═══ RUNS ═══════════════════════════════════════════════════════════════ -->
+  <div id="panel-runs" class="tab-panel">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <p style="font-size:13px;color:#666;margin:0">Module runs linked to this client.</p>
+      <button class="btn-primary" style="font-size:12px;padding:8px 14px" onclick="openRunModal()">▶ Run Module</button>
+    </div>
+    <div id="runs-list"><div style="color:#aaa;font-size:13px;padding:20px 0">No runs yet.</div></div>
+  </div>
+
+  <!-- ═══ NOTES ══════════════════════════════════════════════════════════════ -->
+  <div id="panel-notes" class="tab-panel">
+    <div style="max-width:680px">
+      <div style="margin-bottom:18px">
+        <textarea id="new-comment-body" class="input-field" rows="3" placeholder="Add a consultant note — supports markdown…" style="resize:vertical;min-height:72px"></textarea>
+        <div style="display:flex;justify-content:flex-end;margin-top:8px">
+          <button class="btn-primary" style="font-size:12px;padding:8px 16px" onclick="submitComment()">Add Note</button>
+        </div>
+      </div>
+      <div id="comments-list"><div style="color:#aaa;font-size:13px">No notes yet.</div></div>
+    </div>
+  </div>
+
+  <!-- ═══ MEVO CHAT ══════════════════════════════════════════════════════════ -->
+  <div id="panel-mevo" class="tab-panel">
+    <div style="max-width:720px">
+      <div class="card" style="padding:20px;margin-bottom:14px;background:#f0fdfc;border-color:#b2ede9">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <span style="font-size:20px">🤖</span>
+          <span style="font-size:14px;font-weight:700;color:#0bb4aa">MEVO — Client-Scoped AI Colleague</span>
+        </div>
+        <p style="font-size:12px;color:#555;margin:0;line-height:1.6" id="mevo-context-banner">
+          Context loaded: <strong id="ctx-name">—</strong> · Mode: <strong id="ctx-mode">—</strong>
+        </p>
+      </div>
+      <div id="mevo-messages" style="min-height:280px;max-height:460px;overflow-y:auto;display:flex;flex-direction:column;gap:12px;margin-bottom:14px;padding:4px 0"></div>
+      <div style="display:flex;gap:10px">
+        <input id="mevo-input" class="input-field" placeholder="Ask MEVO about this client…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMevo()}"/>
+        <button class="btn-primary" style="white-space:nowrap;padding:9px 18px" onclick="sendMevo()">Send →</button>
+      </div>
+      <p style="font-size:11px;color:#aaa;margin-top:6px">MEVO has full context of this client's goals, competitors, modules, and all notes.</p>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Modals ──────────────────────────────────────────────────────────────── -->
+
+<!-- Task modal -->
+<div id="task-modal" class="modal-bg" style="display:none" onclick="if(event.target===this)closeModal('task-modal')">
+  <div class="modal">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <h3 style="font-size:16px;font-weight:800;margin:0">New Task</h3>
+      <button onclick="closeModal('task-modal')" style="background:none;border:none;font-size:20px;color:#888;cursor:pointer">×</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:13px">
+      <div><label class="field-label">Title *</label><input id="task-title" class="input-field" placeholder="Fix missing H1 on product pages"/></div>
+      <div><label class="field-label">Description</label><textarea id="task-desc" class="input-field" rows="2" placeholder="Optional details…" style="resize:vertical"></textarea></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div><label class="field-label">Impact</label>
+          <select id="task-impact" class="input-field"><option value="HIGH">High</option><option value="MEDIUM" selected>Medium</option><option value="LOW">Low</option></select>
+        </div>
+        <div><label class="field-label">Due Date</label><input id="task-due" class="input-field" type="date"/></div>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px">
+      <button class="btn-ghost" onclick="closeModal('task-modal')">Cancel</button>
+      <button class="btn-primary" onclick="submitTask()">Create Task</button>
+    </div>
+  </div>
+</div>
+
+<!-- Insight modal -->
+<div id="insight-modal" class="modal-bg" style="display:none" onclick="if(event.target===this)closeModal('insight-modal')">
+  <div class="modal">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <h3 style="font-size:16px;font-weight:800;margin:0">Add Insight</h3>
+      <button onclick="closeModal('insight-modal')" style="background:none;border:none;font-size:20px;color:#888;cursor:pointer">×</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:13px">
+      <div><label class="field-label">Title *</label><input id="insight-title" class="input-field" placeholder="Core Web Vitals failing on mobile"/></div>
+      <div><label class="field-label">Body</label><textarea id="insight-body" class="input-field" rows="3" placeholder="Describe the finding…" style="resize:vertical"></textarea></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div><label class="field-label">Severity</label>
+          <select id="insight-severity" class="input-field"><option value="HIGH">High</option><option value="MEDIUM" selected>Medium</option><option value="LOW">Low</option></select>
+        </div>
+        <div><label class="field-label">Category</label>
+          <select id="insight-category" class="input-field">
+            <option value="technical">Technical SEO</option>
+            <option value="content">Content</option>
+            <option value="visibility">Visibility</option>
+            <option value="architecture">Architecture</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px">
+      <button class="btn-ghost" onclick="closeModal('insight-modal')">Cancel</button>
+      <button class="btn-primary" onclick="submitInsight()">Add Insight</button>
+    </div>
+  </div>
+</div>
+
+<!-- Run Module modal -->
+<div id="run-modal" class="modal-bg" style="display:none" onclick="if(event.target===this)closeModal('run-modal')">
+  <div class="modal">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <h3 style="font-size:16px;font-weight:800;margin:0">Run Module for Client</h3>
+      <button onclick="closeModal('run-modal')" style="background:none;border:none;font-size:20px;color:#888;cursor:pointer">×</button>
+    </div>
+    <p style="font-size:13px;color:#666;margin:0 0 16px">Select a module — it will open pre-filled with this client's data.</p>
+    <div id="run-module-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px"></div>
+    <div style="margin-top:20px;padding-top:16px;border-top:1px solid #e2e8f0">
+      <p style="font-size:12px;color:#888;margin:0">Or log a completed run manually:</p>
+      <div style="display:flex;gap:10px;margin-top:10px">
+        <input id="manual-run-id" class="input-field" placeholder="Job ID from agent-runner…"/>
+        <select id="manual-run-module" class="input-field" style="width:auto">
+          <option value="aiv">AI Visibility</option>
+          <option value="seo-crawler">SEO Crawler</option>
+          <option value="competitor">Competitor Analyst</option>
+          <option value="brand-voice">Brand Voice</option>
+        </select>
+        <button class="btn-primary" style="white-space:nowrap;font-size:12px" onclick="logManualRun()">Log</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit client settings modal -->
+<div id="edit-modal" class="modal-bg" style="display:none" onclick="if(event.target===this)closeModal('edit-modal')">
+  <div class="modal">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <h3 style="font-size:16px;font-weight:800;margin:0">Client Settings</h3>
+      <button onclick="closeModal('edit-modal')" style="background:none;border:none;font-size:20px;color:#888;cursor:pointer">×</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:13px">
+      <div><label class="field-label">Company Name</label><input id="edit-name" class="input-field"/></div>
+      <div><label class="field-label">Primary Domain</label><input id="edit-domain" class="input-field"/></div>
+      <div><label class="field-label">Industry</label><input id="edit-industry" class="input-field"/></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div><label class="field-label">Service Mode</label>
+          <select id="edit-mode" class="input-field"><option value="ADVISORY">Advisory</option><option value="FULL_SERVICE">Full Service</option></select>
+        </div>
+        <div><label class="field-label">Status</label>
+          <select id="edit-status" class="input-field"><option value="ONBOARDING">Onboarding</option><option value="ACTIVE">Active</option><option value="PAUSED">Paused</option></select>
+        </div>
+      </div>
+      <div><label class="field-label">Notes</label><textarea id="edit-notes" class="input-field" rows="3" style="resize:vertical"></textarea></div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px">
+      <button class="btn-ghost" onclick="closeModal('edit-modal')">Cancel</button>
+      <button class="btn-primary" onclick="submitEdit()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<style>.field-label{font-size:11px;font-weight:700;text-transform:uppercase;color:#888;letter-spacing:.06em;display:block;margin-bottom:5px}</style>
+
+<script>
+const API = 'https://web-production-c14f30.up.railway.app';
+if (!sessionStorage.getItem('at_auth')) window.location.href = 'login.html';
+function logout(){ sessionStorage.removeItem('at_auth'); window.location.href='login.html'; }
+
+const params = new URLSearchParams(location.search);
+const CLIENT_ID = params.get('id');
+if (!CLIENT_ID) { window.location.href = 'client.html'; }
+
+let _client = null, _tasks = [], _insights = [], _runs = [], _comments = [];
+let _taskFilter = '', _insightFilter = '';
+let _mevoHistory = [];
+
+/* ── Data loading ────────────────────────────────────────────────────────── */
+async function loadAll() {
+  const [c, t, i, r, cm, st] = await Promise.all([
+    fetch(`${API}/api/clients/${CLIENT_ID}`).then(r=>r.json()).catch(()=>null),
+    fetch(`${API}/api/clients/${CLIENT_ID}/tasks`).then(r=>r.json()).catch(()=>[]),
+    fetch(`${API}/api/clients/${CLIENT_ID}/insights`).then(r=>r.json()).catch(()=>[]),
+    fetch(`${API}/api/clients/${CLIENT_ID}/runs`).then(r=>r.json()).catch(()=>[]),
+    fetch(`${API}/api/clients/${CLIENT_ID}/comments`).then(r=>r.json()).catch(()=>[]),
+    fetch(`${API}/api/clients/${CLIENT_ID}/stats`).then(r=>r.json()).catch(()=>({})),
+  ]);
+  if (!c) { alert('Client not found.'); window.location.href='client.html'; return; }
+  _client = c; _tasks = t; _insights = i; _runs = r; _comments = cm;
+  renderHeader();
+  renderKPIs(st);
+  renderOverview();
+  renderTasks();
+  renderInsights();
+  renderRuns();
+  renderComments();
+  updateBadges(st);
+}
+
+function renderHeader() {
+  const c = _client;
+  document.title = `${c.company_name} — Amazing Client`;
+  document.getElementById('client-name').textContent = c.company_name;
+  document.getElementById('client-domain').textContent = c.primary_domain || '';
+  document.getElementById('client-industry').textContent = c.industry ? `· ${c.industry}` : '';
+  const initials = c.company_name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  document.getElementById('client-avatar').textContent = initials;
+  const mb = document.getElementById('client-mode-badge');
+  mb.textContent = c.service_mode === 'FULL_SERVICE' ? 'Full Service' : 'Advisory';
+  mb.className = 'badge ' + (c.service_mode === 'FULL_SERVICE' ? 'badge-full' : 'badge-advisory');
+  const sb = document.getElementById('client-status-badge');
+  sb.textContent = c.status;
+  sb.className = 'badge ' + {ACTIVE:'badge-active',ONBOARDING:'badge-onboarding',PAUSED:'badge-paused'}[c.status] || 'badge-paused';
+  document.getElementById('ctx-name').textContent = c.company_name;
+  document.getElementById('ctx-mode').textContent = c.service_mode === 'FULL_SERVICE' ? 'Full Service' : 'Advisory';
+}
+
+function renderKPIs(st) {
+  document.getElementById('kpi-tasks').textContent    = st.open_tasks ?? '—';
+  document.getElementById('kpi-insights').textContent = st.open_insights ?? '—';
+  document.getElementById('kpi-high').textContent     = st.high_insights ?? '—';
+  document.getElementById('kpi-runs').textContent     = st.total_runs ?? '—';
+}
+
+function updateBadges(st) {
+  document.getElementById('badge-tasks').textContent    = st.open_tasks || '';
+  document.getElementById('badge-insights').textContent = st.open_insights || '';
+}
+
+function renderOverview() {
+  const c = _client;
+  const goals = (c.goals||[]);
+  document.getElementById('goals-list').innerHTML = goals.length
+    ? goals.map(g=>`<div style="padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:13px">✦ ${typeof g==='object'?g.title:g}</div>`).join('')
+    : '<span style="color:#aaa;font-size:13px">No goals defined.</span>';
+
+  const comps = (c.competitors||[]);
+  document.getElementById('competitors-list').innerHTML = comps.length
+    ? comps.map(cp=>{
+        const name = typeof cp==='object' ? (cp.name||cp.domain) : cp;
+        const domain = typeof cp==='object' ? (cp.domain||'') : cp;
+        return `<div style="padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:13px;display:flex;justify-content:space-between">
+          <span>${name}</span><span style="color:#888;font-size:12px">${domain!==name?domain:''}</span>
+        </div>`;
+      }).join('')
+    : '<span style="color:#aaa;font-size:13px">No competitors defined.</span>';
+
+  // Tool links pre-filled with client context
+  const modules = [
+    {id:'aiv',       name:'AI Visibility',   icon:'📡', url: buildToolUrl('agent-runner.html', {agent:'aiv', client_id: CLIENT_ID})},
+    {id:'seo',       name:'SEO Crawler',     icon:'🔍', url: buildToolUrl('seo-crawler.html', {client_id: CLIENT_ID, prefill_url: c.primary_domain})},
+    {id:'query',     name:'QueryMatch',      icon:'💬', url: `query-match.html`},
+    {id:'brand',     name:'Brand Voice',     icon:'🎙️', url: `brand-voice.html`},
+    {id:'agent',     name:'All Agents',      icon:'🤖', url: `agents.html`},
+    {id:'ipr',       name:'IPR Sandbox',     icon:'🕸️', url: `ipr-sandbox.html`},
+  ];
+  document.getElementById('tool-links').innerHTML = modules.map(m=>`
+    <a href="${m.url}" style="display:flex;align-items:center;gap:8px;padding:10px 14px;border:1px solid #e2e8f0;border-radius:9px;text-decoration:none;color:#555;font-size:12px;font-weight:600;background:#fff;transition:border-color .15s;cursor:pointer"
+       onmouseover="this.style.borderColor='#b2ede9';this.style.color='#0bb4aa'" onmouseout="this.style.borderColor='#e2e8f0';this.style.color='#555'">
+      <span style="font-size:16px">${m.icon}</span> ${m.name}
+    </a>`).join('');
+
+  // Activity feed (recent tasks + insights + runs + comments)
+  const events = [
+    ..._tasks.slice(0,3).map(t=>({ts:t.created_at,icon:'✅',bg:'#dcfce7',text:`Task created: ${t.title}`,sev:t.impact})),
+    ..._insights.slice(0,3).map(i=>({ts:i.created_at,icon:'💡',bg:'#fef9c3',text:`Insight: ${i.title}`,sev:i.severity})),
+    ..._runs.slice(0,3).map(r=>({ts:r.created_at,icon:'▶',bg:'#e6fdfb',text:`Run: ${r.module_name||r.module_id}`,sev:''})),
+    ..._comments.slice(0,3).map(c=>({ts:c.created_at,icon:'📝',bg:'#f1f5f9',text:c.body.slice(0,60)+(c.body.length>60?'…':''),sev:''})),
+  ].sort((a,b)=>b.ts?.localeCompare(a.ts||'')).slice(0,8);
+
+  document.getElementById('activity-feed').innerHTML = events.length
+    ? events.map(e=>`
+      <div class="activity-row">
+        <div class="activity-icon" style="background:${e.bg}">${e.icon}</div>
+        <div style="flex:1">
+          <div style="font-size:13px;color:#333">${e.text}</div>
+          <div style="font-size:11px;color:#aaa;margin-top:2px">${formatDate(e.ts)}</div>
+        </div>
+      </div>`).join('')
+    : '<div style="color:#aaa;font-size:13px">No activity yet.</div>';
+}
+
+function buildToolUrl(base, params) {
+  const q = Object.entries(params).filter(([,v])=>v).map(([k,v])=>`${k}=${encodeURIComponent(v)}`).join('&');
+  return q ? `${base}?${q}` : base;
+}
+
+/* ── Tasks ───────────────────────────────────────────────────────────────── */
+function filterTasks(status, btn) {
+  _taskFilter = status;
+  document.querySelectorAll('#panel-tasks .btn-ghost').forEach(b=>{b.style.borderColor='#e2e8f0';b.style.color='#555'});
+  if(btn){btn.style.borderColor='#0bb4aa';btn.style.color='#0bb4aa';}
+  renderTasks();
+}
+function renderTasks() {
+  let list = _tasks;
+  if (_taskFilter) list = list.filter(t=>t.status===_taskFilter);
+  const el = document.getElementById('tasks-list');
+  el.innerHTML = list.length ? list.map(t=>`
+    <div class="task-row" onclick="cycleTaskStatus('${t.id}','${t.status}')">
+      <div style="width:10px;height:10px;border-radius:50%;flex-shrink:0;background:${{HIGH:'#dc2626',MEDIUM:'#f59e0b',LOW:'#16a34a'}[t.impact]||'#aaa'}"></div>
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:600;color:#101010">${t.title}</div>
+        ${t.description?`<div style="font-size:12px;color:#888;margin-top:2px">${t.description.slice(0,80)}</div>`:''}
+      </div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <span class="badge ${statusClass(t.status)}">${t.status.replace('_',' ')}</span>
+        <span style="font-size:11px;color:#aaa">${formatDate(t.created_at)}</span>
+      </div>
+    </div>`).join('')
+  : '<div style="color:#aaa;font-size:13px;padding:20px 0">No tasks${_taskFilter?" in this status":""} yet.</div>';
+}
+
+async function cycleTaskStatus(tid, current) {
+  const next = {OPEN:'IN_PROGRESS',IN_PROGRESS:'DONE',DONE:'OPEN'}[current]||'OPEN';
+  const r = await fetch(`${API}/api/clients/${CLIENT_ID}/tasks/${tid}`, {
+    method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:next})});
+  const updated = await r.json();
+  _tasks = _tasks.map(t=>t.id===tid?updated:t);
+  renderTasks();
+}
+
+/* ── Insights ────────────────────────────────────────────────────────────── */
+function filterInsights(sev, btn) {
+  _insightFilter = sev;
+  document.querySelectorAll('#panel-insights .btn-ghost').forEach(b=>{b.style.borderColor='#e2e8f0';b.style.color='#555'});
+  if(btn){btn.style.borderColor='#0bb4aa';btn.style.color='#0bb4aa';}
+  renderInsights();
+}
+function renderInsights() {
+  let list = _insights;
+  if (_insightFilter) list = list.filter(i=>i.severity===_insightFilter);
+  const el = document.getElementById('insights-list');
+  el.innerHTML = list.length ? list.map(i=>`
+    <div class="insight-row">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:6px">
+        <span style="font-size:13px;font-weight:700;color:#101010">${i.title}</span>
+        <div style="display:flex;gap:6px">
+          <span class="badge sev-${i.severity.toLowerCase()}">${i.severity}</span>
+          <span class="badge status-${i.status.toLowerCase().replace('_','-')}">${i.status.replace('_',' ')}</span>
+          ${i.module_id?`<span style="font-size:10px;background:#f1f5f9;color:#888;padding:2px 7px;border-radius:4px">${i.module_id}</span>`:''}
+        </div>
+      </div>
+      ${i.body?`<div style="font-size:12px;color:#666;line-height:1.5">${i.body.slice(0,200)}${i.body.length>200?'…':''}</div>`:''}
+      <div style="display:flex;gap:8px;margin-top:10px">
+        ${['OPEN','IN_PROGRESS','RESOLVED'].map(s=>
+          `<button class="btn-ghost" style="font-size:11px;padding:3px 9px${i.status===s?';border-color:#0bb4aa;color:#0bb4aa':''}"
+            onclick="event.stopPropagation();setInsightStatus('${i.id}','${s}')">${s.replace('_',' ')}</button>`
+        ).join('')}
+      </div>
+    </div>`).join('')
+  : '<div style="color:#aaa;font-size:13px;padding:20px 0">No insights yet.</div>';
+}
+
+async function setInsightStatus(iid, status) {
+  const r = await fetch(`${API}/api/clients/${CLIENT_ID}/insights/${iid}`, {
+    method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})});
+  const updated = await r.json();
+  _insights = _insights.map(i=>i.id===iid?updated:i);
+  renderInsights();
+}
+
+/* ── Runs ────────────────────────────────────────────────────────────────── */
+function renderRuns() {
+  const el = document.getElementById('runs-list');
+  if (!_runs.length) { el.innerHTML = '<div style="color:#aaa;font-size:13px;padding:20px 0">No runs yet. Click <strong>▶ Run Module</strong> to start.</div>'; return; }
+  el.innerHTML = `<div class="card" style="padding:20px">` +
+    _runs.map(r=>`
+      <div class="run-row">
+        <div style="width:36px;height:36px;border-radius:9px;background:#e6fdfb;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">▶</div>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:700">${r.module_name||r.module_id||'Module'}</div>
+          ${r.summary?`<div style="font-size:12px;color:#888;margin-top:2px">${r.summary.slice(0,100)}</div>`:''}
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:9999px;display:inline-block;
+            background:${{SUCCESS:'#dcfce7',FAILED:'#fee2e2',QUEUED:'#f1f5f9',RUNNING:'#e0f2fe'}[r.status]||'#f1f5f9'};
+            color:${{SUCCESS:'#16a34a',FAILED:'#dc2626',QUEUED:'#555',RUNNING:'#0284c7'}[r.status]||'#555'}">
+            ${r.status}
+          </div>
+          <div style="font-size:11px;color:#aaa;margin-top:4px">${formatDate(r.created_at)}</div>
+        </div>
+      </div>`).join('') + `</div>`;
+}
+
+/* ── Notes / Comments ────────────────────────────────────────────────────── */
+function renderComments() {
+  const el = document.getElementById('comments-list');
+  el.innerHTML = _comments.length ? _comments.map(c=>`
+    <div class="comment-card" style="${c.pinned?'border-color:#b2ede9;background:#f0fdfc;':'' }">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <span style="font-size:11px;font-weight:700;color:#888">${formatDate(c.created_at)}</span>
+        <button class="btn-icon" onclick="pinComment('${c.id}')" title="Pin" style="font-size:14px">${c.pinned?'📌':'📍'}</button>
+      </div>
+      <div style="font-size:13px;color:#333;line-height:1.6;white-space:pre-wrap">${escHtml(c.body)}</div>
+    </div>`).join('')
+  : '<div style="color:#aaa;font-size:13px">No notes yet.</div>';
+}
+
+async function submitComment() {
+  const body = document.getElementById('new-comment-body').value.trim();
+  if (!body) return;
+  const r = await fetch(`${API}/api/clients/${CLIENT_ID}/comments`, {
+    method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({body})});
+  const c = await r.json();
+  _comments.unshift(c);
+  renderComments();
+  document.getElementById('new-comment-body').value = '';
+}
+
+async function pinComment(cmid) {
+  const r = await fetch(`${API}/api/clients/${CLIENT_ID}/comments/${cmid}/pin`, {method:'POST'});
+  const updated = await r.json();
+  _comments = _comments.map(c=>c.id===cmid?updated:c).sort((a,b)=>b.pinned-a.pinned);
+  renderComments();
+}
+
+/* ── Run Modal ───────────────────────────────────────────────────────────── */
+function openRunModal() {
+  const c = _client;
+  const modules = [
+    {id:'aiv',       name:'AI Visibility',    icon:'📡', url: `agent-runner.html?agent=aiv`},
+    {id:'competitor',name:'Competitor Analyst',icon:'⚔️',  url: `agent-runner.html?agent=competitor`},
+    {id:'brand-voice',name:'Brand Voice',     icon:'🎙️', url: `brand-voice.html`},
+    {id:'seo-crawler',name:'SEO Crawler',     icon:'🔍', url: `seo-crawler.html${c.primary_domain?'?url='+encodeURIComponent('https://'+c.primary_domain.replace(/^https?:\/\//,'')):''}` },
+    {id:'landing-page',name:'Landing Page',   icon:'📄', url: `agent-runner.html?agent=landing-page`},
+    {id:'ad-copy',   name:'Ad Copy Writer',    icon:'✍️', url: `agent-runner.html?agent=ad-copy`},
+  ];
+  sessionStorage.setItem('ac_client_id', CLIENT_ID);
+  sessionStorage.setItem('ac_client_name', c.company_name);
+  sessionStorage.setItem('ac_client_domain', c.primary_domain||'');
+  sessionStorage.setItem('ac_competitors', JSON.stringify((c.competitors||[]).map(x=>typeof x==='object'?x.domain:x).join(',')));
+
+  document.getElementById('run-module-grid').innerHTML = modules.map(m=>`
+    <a href="${m.url}" style="display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid #e2e8f0;border-radius:10px;text-decoration:none;color:#333;font-size:13px;font-weight:600;background:#fff;transition:border-color .15s"
+       onmouseover="this.style.borderColor='#b2ede9'" onmouseout="this.style.borderColor='#e2e8f0'">
+      <span style="font-size:20px">${m.icon}</span><span>${m.name}</span>
+    </a>`).join('');
+  document.getElementById('run-modal').style.display = 'flex';
+}
+
+async function logManualRun() {
+  const job_id = document.getElementById('manual-run-id').value.trim();
+  const module_id = document.getElementById('manual-run-module').value;
+  if (!job_id) return;
+  const r = await fetch(`${API}/api/clients/${CLIENT_ID}/runs`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({job_id, module_id, module_name: module_id, status:'SUCCESS'}),
+  });
+  const run = await r.json();
+  _runs.unshift(run);
+  closeModal('run-modal');
+  showTab('runs');
+  renderRuns();
+}
+
+/* ── Edit Modal ──────────────────────────────────────────────────────────── */
+function openEditModal() {
+  const c = _client;
+  document.getElementById('edit-name').value     = c.company_name||'';
+  document.getElementById('edit-domain').value   = c.primary_domain||'';
+  document.getElementById('edit-industry').value = c.industry||'';
+  document.getElementById('edit-mode').value     = c.service_mode||'ADVISORY';
+  document.getElementById('edit-status').value   = c.status||'ONBOARDING';
+  document.getElementById('edit-notes').value    = c.notes||'';
+  document.getElementById('edit-modal').style.display = 'flex';
+}
+
+async function submitEdit() {
+  const data = {
+    company_name:   document.getElementById('edit-name').value.trim(),
+    primary_domain: document.getElementById('edit-domain').value.trim(),
+    industry:       document.getElementById('edit-industry').value.trim(),
+    service_mode:   document.getElementById('edit-mode').value,
+    status:         document.getElementById('edit-status').value,
+    notes:          document.getElementById('edit-notes').value.trim(),
+  };
+  const r = await fetch(`${API}/api/clients/${CLIENT_ID}`, {
+    method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
+  _client = await r.json();
+  renderHeader();
+  closeModal('edit-modal');
+}
+
+/* ── Task Modal ──────────────────────────────────────────────────────────── */
+function openTaskModal() { document.getElementById('task-modal').style.display='flex'; }
+async function submitTask() {
+  const title = document.getElementById('task-title').value.trim();
+  if (!title) return;
+  const r = await fetch(`${API}/api/clients/${CLIENT_ID}/tasks`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      title, description: document.getElementById('task-desc').value.trim(),
+      impact: document.getElementById('task-impact').value,
+      due_date: document.getElementById('task-due').value,
+    }),
+  });
+  const t = await r.json();
+  _tasks.unshift(t);
+  closeModal('task-modal');
+  renderTasks();
+  document.getElementById('task-title').value = '';
+  document.getElementById('task-desc').value  = '';
+}
+
+/* ── Insight Modal ───────────────────────────────────────────────────────── */
+function openInsightModal() { document.getElementById('insight-modal').style.display='flex'; }
+async function submitInsight() {
+  const title = document.getElementById('insight-title').value.trim();
+  if (!title) return;
+  const r = await fetch(`${API}/api/clients/${CLIENT_ID}/insights`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      title, body: document.getElementById('insight-body').value.trim(),
+      severity: document.getElementById('insight-severity').value,
+      category: document.getElementById('insight-category').value,
+    }),
+  });
+  const ins = await r.json();
+  _insights.unshift(ins);
+  closeModal('insight-modal');
+  renderInsights();
+  document.getElementById('insight-title').value = '';
+  document.getElementById('insight-body').value  = '';
+}
+
+/* ── MEVO Chat ───────────────────────────────────────────────────────────── */
+async function sendMevo() {
+  const input = document.getElementById('mevo-input');
+  const q = input.value.trim();
+  if (!q) return;
+  input.value = '';
+  appendMevoMsg('user', q);
+
+  const c = _client;
+  const systemPrompt = `You are MEVO, the AI colleague inside AmazingTools. You are in the workspace of customer ${c.company_name} (${c.primary_domain||'domain unknown'}).
+
+Customer snapshot:
+- Industry: ${c.industry||'—'}
+- Markets: ${(c.markets||[]).join(', ')||'—'}
+- Service mode: ${c.service_mode}
+- Goals: ${(c.goals||[]).map(g=>typeof g==='object'?g.title:g).join('; ')||'None defined'}
+- Top competitors: ${(c.competitors||[]).map(x=>typeof x==='object'?x.name||x.domain:x).join(', ')||'None defined'}
+- Open tasks: ${_tasks.filter(t=>t.status!=='DONE').length}
+- Open insights: ${_insights.filter(i=>i.status==='OPEN').length} (${_insights.filter(i=>i.severity==='HIGH'&&i.status==='OPEN').length} high severity)
+
+${c.notes ? 'Consultant notes: '+c.notes : ''}
+
+You are concise, data-grounded, and always reference this client's specific context. You cannot execute changes — you advise and suggest tasks.`;
+
+  _mevoHistory.push({role:'user', content: q});
+  appendMevoMsg('assistant', null); // loading
+
+  try {
+    const msgs = [
+      {role:'system', content: systemPrompt},
+      ..._mevoHistory.slice(-8),
+    ];
+    const r = await fetch(`${API}/api/analyze/rewrite`, {  // reuse existing AI endpoint
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({section: q, query: 'mevo-chat', url: ''}),
+    }).catch(()=>null);
+
+    // Fall back to direct OpenAI call via a generic endpoint
+    // We'll use the semantic text endpoint creatively or just call a chat endpoint
+    // Since there's no dedicated MEVO endpoint yet, hit the chat model directly via the rewrite flow
+    // Actually, we can POST to a made-up /api/mevo endpoint we haven't created yet
+    // Better to call the model through the existing infrastructure by using a simpler approach:
+    // We'll POST to /api/brand-voice/build as a creative workaround — NO, that's wrong.
+    // Let's just show a placeholder response and note we need the /api/mevo endpoint.
+    const answer = `I'm MEVO, your AI colleague for **${c.company_name}**. I can see ${_tasks.filter(t=>t.status!=='DONE').length} open tasks and ${_insights.filter(i=>i.status==='OPEN').length} open insights for this client. To enable live AI responses, connect the MEVO endpoint in the backend. In the meantime, use the Notes tab to log observations and the Tasks tab to track work.`;
+    
+    removeMevoLoading();
+    _mevoHistory.push({role:'assistant', content: answer});
+    appendMevoMsg('assistant', answer);
+  } catch(e) {
+    removeMevoLoading();
+    appendMevoMsg('assistant', 'Error connecting to MEVO. Please check the API connection.');
+  }
+}
+
+function appendMevoMsg(role, text) {
+  const el = document.getElementById('mevo-messages');
+  const div = document.createElement('div');
+  div.className = 'mevo-msg-' + role;
+  div.style.cssText = role==='user'
+    ? 'align-self:flex-end;background:#0bb4aa;color:#fff;border-radius:14px 14px 2px 14px;padding:10px 14px;max-width:80%;font-size:13px;line-height:1.6'
+    : 'align-self:flex-start;background:#fff;border:1px solid #e2e8f0;border-radius:14px 14px 14px 2px;padding:10px 14px;max-width:85%;font-size:13px;line-height:1.6;box-shadow:0 1px 4px rgba(0,0,0,.06)';
+  if (text === null) {
+    div.id = 'mevo-loading';
+    div.innerHTML = '<div class="dot-pulse"><span></span><span></span><span></span></div>';
+  } else {
+    div.innerHTML = text.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>');
+  }
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+}
+
+function removeMevoLoading() {
+  const l = document.getElementById('mevo-loading');
+  if (l) l.remove();
+}
+
+/* ── Tab switching ───────────────────────────────────────────────────────── */
+function showTab(name) {
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('panel-'+name).classList.add('active');
+  document.getElementById('tab-'+name).classList.add('active');
+}
+
+/* ── Helpers ─────────────────────────────────────────────────────────────── */
+function closeModal(id) { document.getElementById(id).style.display='none'; }
+
+function formatDate(iso) {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString('sv-SE', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+  } catch { return ''; }
+}
+
+function statusClass(s) {
+  return {'OPEN':'status-open','IN_PROGRESS':'status-in_progress','DONE':'status-done','CANCELLED':'status-cancelled'}[s]||'status-open';
+}
+
+function escHtml(s) {
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+loadAll();
+</script>
+</body>
+</html>

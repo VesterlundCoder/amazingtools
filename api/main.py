@@ -42,6 +42,7 @@ import sub_agents
 import memory_client
 import marketing_agents
 import brand_voice_agent
+import client_db
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -225,6 +226,7 @@ _scheduler = BackgroundScheduler()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    client_db.init_client_db()
     _start_scheduler()
     logger.info("Amazing Tools SEO Crawler API starting up.")
     yield
@@ -801,6 +803,127 @@ async def _ahrefs_get(path: str, params: dict, api_key: str) -> dict:
         )
     except Exception as e:
         raise HTTPException(502, detail=f"Ahrefs unreachable: {e}")
+
+
+# ── Amazing Client endpoints ────────────────────────────────────────────────
+
+@app.get("/api/clients")
+def clients_list():
+    return client_db.list_customers()
+
+
+@app.post("/api/clients")
+def clients_create(data: dict):
+    if not data.get("company_name"):
+        raise HTTPException(400, "company_name required")
+    return client_db.create_customer(data)
+
+
+@app.get("/api/clients/{cid}")
+def clients_get(cid: str):
+    c = client_db.get_customer(cid)
+    if not c:
+        raise HTTPException(404, "Client not found")
+    return c
+
+
+@app.put("/api/clients/{cid}")
+def clients_update(cid: str, data: dict):
+    c = client_db.update_customer(cid, data)
+    if not c:
+        raise HTTPException(404, "Client not found")
+    return c
+
+
+@app.delete("/api/clients/{cid}")
+def clients_delete(cid: str):
+    client_db.delete_customer(cid)
+    return {"ok": True}
+
+
+@app.get("/api/clients/{cid}/stats")
+def clients_stats(cid: str):
+    return client_db.get_customer_stats(cid)
+
+
+# Tasks
+@app.get("/api/clients/{cid}/tasks")
+def tasks_list(cid: str):
+    return client_db.list_tasks(cid)
+
+
+@app.post("/api/clients/{cid}/tasks")
+def tasks_create(cid: str, data: dict):
+    if not data.get("title"):
+        raise HTTPException(400, "title required")
+    return client_db.create_task(cid, data)
+
+
+@app.put("/api/clients/{cid}/tasks/{tid}")
+def tasks_update(cid: str, tid: str, data: dict):
+    t = client_db.update_task(tid, data)
+    if not t:
+        raise HTTPException(404, "Task not found")
+    return t
+
+
+# Insights
+@app.get("/api/clients/{cid}/insights")
+def insights_list(cid: str):
+    return client_db.list_insights(cid)
+
+
+@app.post("/api/clients/{cid}/insights")
+def insights_create(cid: str, data: dict):
+    if not data.get("title"):
+        raise HTTPException(400, "title required")
+    return client_db.create_insight(cid, data)
+
+
+@app.put("/api/clients/{cid}/insights/{iid}")
+def insights_update(cid: str, iid: str, data: dict):
+    s = data.get("status", "OPEN")
+    result = client_db.update_insight_status(iid, s)
+    if not result:
+        raise HTTPException(404, "Insight not found")
+    return result
+
+
+# Comments
+@app.get("/api/clients/{cid}/comments")
+def comments_list(cid: str, target_type: str = None):
+    return client_db.list_comments(cid, target_type)
+
+
+@app.post("/api/clients/{cid}/comments")
+def comments_create(cid: str, data: dict):
+    if not data.get("body"):
+        raise HTTPException(400, "body required")
+    return client_db.create_comment(cid, data)
+
+
+@app.post("/api/clients/{cid}/comments/{cmid}/pin")
+def comments_pin(cid: str, cmid: str):
+    return client_db.toggle_pin(cmid)
+
+
+# Runs
+@app.get("/api/clients/{cid}/runs")
+def runs_list(cid: str):
+    return client_db.list_runs(cid)
+
+
+@app.post("/api/clients/{cid}/runs")
+def runs_create(cid: str, data: dict):
+    return client_db.create_run_link(cid, data)
+
+
+@app.put("/api/clients/{cid}/runs/{rid}")
+def runs_update(cid: str, rid: str, data: dict):
+    r = client_db.update_run_link(rid, data.get("status", "QUEUED"), data.get("summary", ""))
+    if not r:
+        raise HTTPException(404, "Run not found")
+    return r
 
 
 # ── Brand Voice Agent endpoints ────────────────────────────────────────────
