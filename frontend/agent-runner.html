@@ -153,6 +153,7 @@ async function init() {
     document.getElementById('hero-title').textContent = agentMeta.name;
     document.getElementById('hero-desc').textContent  = agentMeta.description;
     buildInputFields(agentMeta.inputs);
+    prefillFromClient();
     loadRecentJobs();
     if (JUMP_JOB) fetchAndRender(JUMP_JOB);
   } catch(e) {
@@ -174,6 +175,44 @@ function buildInputFields(inputs) {
       <input id="f_${inp.key}" class="field-input" type="text" placeholder="${inp.placeholder}"/>
     </div>`;
   }).join('');
+}
+
+// ── Client context pre-fill ──────────────────────────────────────────────────
+function prefillFromClient() {
+  const clientId   = sessionStorage.getItem('ac_client_id');
+  const clientName = sessionStorage.getItem('ac_client_name') || '';
+  const clientDomain = sessionStorage.getItem('ac_client_domain') || '';
+  const competitors  = sessionStorage.getItem('ac_competitors') || '';
+  if (!clientId) return;
+
+  const clientUrl = clientDomain
+    ? (clientDomain.startsWith('http') ? clientDomain : 'https://' + clientDomain)
+    : '';
+
+  // Map of input key → value to prefill
+  const map = {
+    client_name:      clientName,
+    client_url:       clientUrl,
+    url:              clientUrl,
+    site_url:         clientUrl,
+    query:            clientDomain || clientName,
+    brand:            clientName,
+    site_name:        clientName,
+    competitor_names: competitors,
+  };
+
+  Object.entries(map).forEach(([key, val]) => {
+    if (!val) return;
+    const el = document.getElementById('f_' + key);
+    if (el && !el.value) el.value = val;
+  });
+
+  // Show a context banner
+  const container = document.getElementById('input-fields');
+  const banner = document.createElement('div');
+  banner.style.cssText = 'background:#e6fdfb;border:1px solid #b2ede9;border-radius:9px;padding:10px 14px;font-size:12px;color:#0bb4aa;margin-bottom:18px;display:flex;align-items:center;gap:8px';
+  banner.innerHTML = `<span>🏢</span><span>Pre-filled for <strong>${clientName}</strong> · <a href="client-workspace.html?id=${clientId}" style="color:#0bb4aa;font-weight:700">Back to workspace</a></span>`;
+  container.insertBefore(banner, container.firstChild);
 }
 
 function collectInput() {
@@ -209,6 +248,13 @@ async function runAgent(useDummy = false) {
       body: JSON.stringify({ agent: AGENT_ID, input: inputData, use_dummy: useDummy })
     });
     const { job_id } = await resp.json();
+    const clientId = sessionStorage.getItem('ac_client_id');
+    if (clientId) {
+      fetch(`${API_BASE}/api/clients/${clientId}/runs`, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({job_id, module_id: AGENT_ID, module_name: agentMeta?.name || AGENT_ID, status: 'RUNNING'}),
+      }).catch(()=>{});
+    }
     pollJob(job_id);
   } catch(e) {
     showError('Failed to start agent: ' + e.message);

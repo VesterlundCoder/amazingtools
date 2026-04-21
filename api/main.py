@@ -891,7 +891,7 @@ def insights_update(cid: str, iid: str, data: dict):
 
 # Comments
 @app.get("/api/clients/{cid}/comments")
-def comments_list(cid: str, target_type: str = None):
+def comments_list(cid: str, target_type: Optional[str] = None):
     return client_db.list_comments(cid, target_type)
 
 
@@ -905,6 +905,14 @@ def comments_create(cid: str, data: dict):
 @app.post("/api/clients/{cid}/comments/{cmid}/pin")
 def comments_pin(cid: str, cmid: str):
     return client_db.toggle_pin(cmid)
+
+
+@app.post("/api/clients/{cid}/tools/{tool_id}/pin")
+def tools_pin(cid: str, tool_id: str):
+    result = client_db.toggle_pinned_tool(cid, tool_id)
+    if not result:
+        raise HTTPException(404, "Client not found")
+    return result
 
 
 # Runs
@@ -924,6 +932,35 @@ def runs_update(cid: str, rid: str, data: dict):
     if not r:
         raise HTTPException(404, "Run not found")
     return r
+
+
+# ── MEVO Chat endpoint ───────────────────────────────────────────────
+
+class MevoChatRequest(BaseModel):
+    customer_id: str
+    messages:    list[dict]   # [{role, content}]
+    system:      Optional[str] = None
+
+
+@app.post("/api/mevo/chat")
+def mevo_chat(req: MevoChatRequest):
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        raise HTTPException(500, "OPENAI_API_KEY not configured")
+    from openai import OpenAI
+    oai   = OpenAI(api_key=api_key, base_url=OPENAI_BASE_URL)
+    model = os.environ.get("OPENAI_CHAT_MODEL", "gpt-4o-mini")
+    msgs  = []
+    if req.system:
+        msgs.append({"role": "system", "content": req.system})
+    msgs.extend(req.messages[-12:])  # last 12 turns context window
+    try:
+        resp = oai.chat.completions.create(
+            model=model, messages=msgs, max_tokens=600, temperature=0.7
+        )
+        return {"reply": resp.choices[0].message.content or ""}
+    except Exception as e:
+        raise HTTPException(500, detail=str(e))
 
 
 # ── Brand Voice Agent endpoints ────────────────────────────────────────────

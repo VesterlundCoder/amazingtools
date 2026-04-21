@@ -436,20 +436,31 @@ function renderOverview() {
       }).join('')
     : '<span style="color:#aaa;font-size:13px">No competitors defined.</span>';
 
-  // Tool links pre-filled with client context
+  // Tool links pre-filled with client context (with pin toggle)
   const modules = [
-    {id:'aiv',       name:'AI Visibility',   icon:'📡', url: buildToolUrl('agent-runner.html', {agent:'aiv', client_id: CLIENT_ID})},
-    {id:'seo',       name:'SEO Crawler',     icon:'🔍', url: buildToolUrl('seo-crawler.html', {client_id: CLIENT_ID, prefill_url: c.primary_domain})},
-    {id:'query',     name:'QueryMatch',      icon:'💬', url: `query-match.html`},
-    {id:'brand',     name:'Brand Voice',     icon:'🎙️', url: `brand-voice.html`},
-    {id:'agent',     name:'All Agents',      icon:'🤖', url: `agents.html`},
-    {id:'ipr',       name:'IPR Sandbox',     icon:'🕸️', url: `ipr-sandbox.html`},
+    {id:'aiv',        name:'AI Visibility',   icon:'📡', url: buildToolUrl('agent-runner.html', {agent:'aiv'})},
+    {id:'seo-crawler',name:'SEO Crawler',     icon:'🔍', url: buildToolUrl('seo-crawler.html', {prefill_url: c.primary_domain})},
+    {id:'query-match',name:'QueryMatch',      icon:'💬', url: `query-match.html`},
+    {id:'brand-voice',name:'Brand Voice',     icon:'🎙️', url: `brand-voice.html`},
+    {id:'competitor', name:'Competitor',      icon:'⚔️', url: buildToolUrl('agent-runner.html', {agent:'competitor'})},
+    {id:'landing-page',name:'Landing Page',  icon:'📄', url: buildToolUrl('agent-runner.html', {agent:'landing-page'})},
+    {id:'ad-copy',    name:'Ad Copy',         icon:'✍️', url: buildToolUrl('agent-runner.html', {agent:'ad-copy'})},
+    {id:'agents',     name:'All Agents',      icon:'🤖', url: `agents.html`},
   ];
-  document.getElementById('tool-links').innerHTML = modules.map(m=>`
-    <a href="${m.url}" style="display:flex;align-items:center;gap:8px;padding:10px 14px;border:1px solid #e2e8f0;border-radius:9px;text-decoration:none;color:#555;font-size:12px;font-weight:600;background:#fff;transition:border-color .15s;cursor:pointer"
-       onmouseover="this.style.borderColor='#b2ede9';this.style.color='#0bb4aa'" onmouseout="this.style.borderColor='#e2e8f0';this.style.color='#555'">
-      <span style="font-size:16px">${m.icon}</span> ${m.name}
-    </a>`).join('');
+  const pinned = c.pinned_tools || [];
+  const sorted = [...modules].sort((a,b)=>pinned.includes(b.id)-pinned.includes(a.id));
+  document.getElementById('tool-links').innerHTML = sorted.map(m=>{
+    const isPinned = pinned.includes(m.id);
+    return `<div style="position:relative">
+      <a href="${m.url}" style="display:flex;align-items:center;gap:8px;padding:10px 14px 10px 10px;border:${isPinned?'2px solid #0bb4aa':'1px solid #e2e8f0'};border-radius:9px;text-decoration:none;color:${isPinned?'#0bb4aa':'#555'};font-size:12px;font-weight:600;background:${isPinned?'#e6fdfb':'#fff'};transition:border-color .15s;cursor:pointer;padding-right:30px"
+         onmouseover="this.style.borderColor='#b2ede9'" onmouseout="this.style.borderColor='${isPinned?'#0bb4aa':'#e2e8f0'}'">
+        <span style="font-size:16px">${m.icon}</span> ${m.name}
+      </a>
+      <button onclick="event.preventDefault();toggleTool('${m.id}')" title="${isPinned?'Unpin':'Pin'} tool"
+        style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:13px;opacity:${isPinned?1:0.35};padding:2px" 
+        onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=${isPinned?1:0.35}">${isPinned?'📌':'📍'}</button>
+    </div>`;
+  }).join('');
 
   // Activity feed (recent tasks + insights + runs + comments)
   const events = [
@@ -469,6 +480,12 @@ function renderOverview() {
         </div>
       </div>`).join('')
     : '<div style="color:#aaa;font-size:13px">No activity yet.</div>';
+}
+
+async function toggleTool(toolId) {
+  const r = await fetch(`${API}/api/clients/${CLIENT_ID}/tools/${toolId}/pin`, {method:'POST'});
+  _client = await r.json();
+  renderOverview();
 }
 
 function buildToolUrl(base, params) {
@@ -743,30 +760,23 @@ You are concise, data-grounded, and always reference this client's specific cont
   appendMevoMsg('assistant', null); // loading
 
   try {
-    const msgs = [
-      {role:'system', content: systemPrompt},
-      ..._mevoHistory.slice(-8),
-    ];
-    const r = await fetch(`${API}/api/analyze/rewrite`, {  // reuse existing AI endpoint
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({section: q, query: 'mevo-chat', url: ''}),
-    }).catch(()=>null);
-
-    // Fall back to direct OpenAI call via a generic endpoint
-    // We'll use the semantic text endpoint creatively or just call a chat endpoint
-    // Since there's no dedicated MEVO endpoint yet, hit the chat model directly via the rewrite flow
-    // Actually, we can POST to a made-up /api/mevo endpoint we haven't created yet
-    // Better to call the model through the existing infrastructure by using a simpler approach:
-    // We'll POST to /api/brand-voice/build as a creative workaround — NO, that's wrong.
-    // Let's just show a placeholder response and note we need the /api/mevo endpoint.
-    const answer = `I'm MEVO, your AI colleague for **${c.company_name}**. I can see ${_tasks.filter(t=>t.status!=='DONE').length} open tasks and ${_insights.filter(i=>i.status==='OPEN').length} open insights for this client. To enable live AI responses, connect the MEVO endpoint in the backend. In the meantime, use the Notes tab to log observations and the Tasks tab to track work.`;
-    
+    const r = await fetch(`${API}/api/mevo/chat`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        customer_id: CLIENT_ID,
+        system:      systemPrompt,
+        messages:    _mevoHistory.slice(-12),
+      }),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    const answer = data.reply || 'No response.';
     removeMevoLoading();
     _mevoHistory.push({role:'assistant', content: answer});
     appendMevoMsg('assistant', answer);
   } catch(e) {
     removeMevoLoading();
-    appendMevoMsg('assistant', 'Error connecting to MEVO. Please check the API connection.');
+    appendMevoMsg('assistant', `Error: ${e.message}`);
   }
 }
 

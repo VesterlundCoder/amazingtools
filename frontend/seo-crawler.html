@@ -207,6 +207,41 @@
 
   function logout() { sessionStorage.removeItem('at_auth'); window.location.href = 'login.html'; }
 
+  // Pre-fill from Amazing Client context
+  (function prefillFromClient() {
+    const clientId   = sessionStorage.getItem('ac_client_id');
+    const clientName = sessionStorage.getItem('ac_client_name') || '';
+    const domain     = sessionStorage.getItem('ac_client_domain') || '';
+    const compsRaw   = sessionStorage.getItem('ac_competitors') || '';
+    // Also check URL param for direct link
+    const urlParam = new URLSearchParams(location.search).get('url') || new URLSearchParams(location.search).get('prefill_url');
+    const fillUrl = urlParam || (domain ? (domain.startsWith('http') ? domain : 'https://' + domain) : '');
+    if (fillUrl) {
+      const el = document.getElementById('client-url');
+      if (el && !el.value) el.value = fillUrl;
+    }
+    if (compsRaw && clientId) {
+      compsRaw.split(',').filter(Boolean).forEach((c, i) => {
+        if (i === 0) {
+          const first = document.querySelector('.comp-input');
+          if (first && !first.value) first.value = c.trim().startsWith('http') ? c.trim() : 'https://' + c.trim();
+        } else {
+          addCompetitor();
+          const all = document.querySelectorAll('.comp-input');
+          if (all[i] && !all[i].value) all[i].value = c.trim().startsWith('http') ? c.trim() : 'https://' + c.trim();
+        }
+      });
+    }
+    if (clientId && clientName) {
+      const form = document.querySelector('form') || document.getElementById('client-url')?.closest('div');
+      const banner = document.createElement('div');
+      banner.style.cssText = 'background:#e6fdfb;border:1px solid #b2ede9;border-radius:9px;padding:10px 14px;font-size:12px;color:#0bb4aa;margin-bottom:16px;display:flex;align-items:center;gap:8px';
+      banner.innerHTML = `<span>🏢</span><span>Pre-filled for <strong>${clientName}</strong> · <a href="client-workspace.html?id=${clientId}" style="color:#0bb4aa;font-weight:700">Back to workspace</a></span>`;
+      const urlEl = document.getElementById('client-url');
+      if (urlEl) urlEl.parentElement.insertBefore(banner, urlEl.parentElement.firstChild);
+    }
+  })();
+
   /* Competitor rows */
   function updateCompCount() {
     const n = document.querySelectorAll('.comp-row').length;

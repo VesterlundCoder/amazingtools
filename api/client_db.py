@@ -31,6 +31,7 @@ def init_client_db():
             service_mode TEXT DEFAULT 'ADVISORY',
             status       TEXT DEFAULT 'ONBOARDING',
             notes        TEXT DEFAULT '',
+            pinned_tools TEXT DEFAULT '[]',
             created_at   TEXT
         );
         CREATE TABLE IF NOT EXISTS ac_tasks (
@@ -88,7 +89,7 @@ def init_client_db():
 
 def _row_to_customer(row) -> dict:
     d = dict(row)
-    for f in ("markets", "languages", "competitors", "goals"):
+    for f in ("markets", "languages", "competitors", "goals", "pinned_tools"):
         try:
             d[f] = json.loads(d[f] or "[]")
         except Exception:
@@ -144,7 +145,7 @@ def update_customer(cid: str, data: dict) -> dict | None:
         if key in data:
             fields.append(f"{key}=?")
             vals.append(data[key])
-    for key in ("markets", "languages", "competitors", "goals"):
+    for key in ("markets", "languages", "competitors", "goals", "pinned_tools"):
         if key in data:
             fields.append(f"{key}=?")
             vals.append(json.dumps(data[key]))
@@ -159,6 +160,18 @@ def update_customer(cid: str, data: dict) -> dict | None:
 def delete_customer(cid: str):
     with _conn() as db:
         db.execute("DELETE FROM ac_customers WHERE id=?", (cid,))
+
+
+def toggle_pinned_tool(cid: str, tool_id: str) -> dict | None:
+    c = get_customer(cid)
+    if not c:
+        return None
+    tools = c.get("pinned_tools", [])
+    if tool_id in tools:
+        tools = [t for t in tools if t != tool_id]
+    else:
+        tools.append(tool_id)
+    return update_customer(cid, {"pinned_tools": tools})
 
 
 # ── Tasks ────────────────────────────────────────────────────────────────────
