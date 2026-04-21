@@ -45,7 +45,10 @@ import marketing_agents
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-DB_PATH = os.environ.get("DB_PATH", "jobs.db")
+DB_PATH             = os.environ.get("DB_PATH", "jobs.db")
+OPENAI_BASE_URL     = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
+OPENAI_CHAT_MODEL   = os.environ.get("OPENAI_CHAT_MODEL", "gpt-4o")
+OPENAI_MINI_MODEL   = os.environ.get("OPENAI_MINI_MODEL", "gpt-4o-mini")
 
 
 # ── Database (SQLAlchemy — SQLite locally, PostgreSQL on Railway) ─────────────
@@ -600,7 +603,7 @@ async def semantic_analysis(req: SemanticRequest):
         raise HTTPException(400, detail="No readable content found.")
 
     texts = [s["text"] for s in sections]
-    oai   = OpenAI(api_key=api_key)
+    oai   = OpenAI(api_key=api_key, base_url=OPENAI_BASE_URL)
 
     try:
         emb = oai.embeddings.create(
@@ -636,7 +639,7 @@ async def rewrite_section(req: RewriteRequest):
     if not api_key:
         raise HTTPException(500, detail="OPENAI_API_KEY not configured.")
 
-    oai = OpenAI(api_key=api_key)
+    oai = OpenAI(api_key=api_key, base_url=OPENAI_BASE_URL)
     prompt = (
         f'Rewrite the text below to be more semantically aligned with the keyword/query "{req.query}".\n'
         f'Keep the same language, structure type, and approximate length. Improve relevance naturally.'
@@ -644,7 +647,7 @@ async def rewrite_section(req: RewriteRequest):
         f'\n\nOriginal:\n{req.section}\n\nRewrite (no preamble):'
     )
     resp = oai.chat.completions.create(
-        model="gpt-4o-mini",
+        model=OPENAI_MINI_MODEL,
         messages=[{"role": "user", "content": prompt}],
         max_tokens=600,
         temperature=0.6,
@@ -1030,7 +1033,7 @@ def _reward_cron_job():
 def _auto_analyze_and_act(job_id: str, client_url: str, results_dict: dict, api_key: str, wp_creds: dict | None = None):
     """Run after crawl: sub-agent analysis, action extraction, WP execution, memory + history."""
     logger.info("[auto-agent] Starting for job %s (%s)", job_id, client_url)
-    oai          = OpenAI(api_key=api_key)
+    oai          = OpenAI(api_key=api_key, base_url=OPENAI_BASE_URL)
     client_data  = results_dict.get(client_url, {})
     pages        = client_data.get("pages", [])
     metrics      = _extract_metrics(results_dict, client_url)
@@ -1529,9 +1532,9 @@ def analyze_job(job_id: str, apply_actions: bool = True):
     learning_ctx = _get_learning_context(client_url)
     prompt = _build_prompt(results, learning_context=learning_ctx)
 
-    client = OpenAI(api_key=api_key)
+    client = OpenAI(api_key=api_key, base_url=OPENAI_BASE_URL)
     response = client.chat.completions.create(
-        model="gpt-4o",
+        model=OPENAI_CHAT_MODEL,
         messages=[
             {"role": "system", "content": "Du är en expert SEO-konsult som ger konkreta, handlingsinriktade råd på svenska."},
             {"role": "user",   "content": prompt},
@@ -1578,9 +1581,9 @@ async def mevo_chat(req: ChatRequest):
     messages.append({"role": "user", "content": req.message})
 
     try:
-        client = OpenAI(api_key=api_key)
+        client = OpenAI(api_key=api_key, base_url=OPENAI_BASE_URL)
         resp = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=OPENAI_MINI_MODEL,
             messages=messages,
             max_tokens=600,
             temperature=0.7,

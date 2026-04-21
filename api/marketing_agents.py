@@ -34,7 +34,10 @@ _HEADERS = {"User-Agent": "Mozilla/5.0 AmazingTools/1.0"}
 # ── Shared helpers ─────────────────────────────────────────────────────────────
 
 def _oai() -> OpenAI:
-    return OpenAI(api_key=os.environ.get("OPENAI_API_KEY", ""))
+    return OpenAI(
+        api_key=os.environ.get("OPENAI_API_KEY", ""),
+        base_url=os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+    )
 
 
 def _fetch_text(url: str, max_chars: int = 6000) -> str:

@@ -30,9 +30,9 @@ def extract_entities(
         return []
 
     try:
-        oai = OpenAI(api_key=api_key)
+        oai = OpenAI(api_key=api_key, base_url=os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1"))
         resp = oai.chat.completions.create(
-            model="gpt-4o-mini",
+            model=os.environ.get("OPENAI_MINI_MODEL", "gpt-4o-mini"),
             messages=[{
                 "role": "user",
                 "content": (

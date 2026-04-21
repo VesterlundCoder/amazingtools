@@ -25,7 +25,10 @@ logger = logging.getLogger(__name__)
 
 
 def _client() -> OpenAI:
-    return OpenAI(api_key=os.environ.get("OPENAI_API_KEY", ""))
+    return OpenAI(
+        api_key=os.environ.get("OPENAI_API_KEY", ""),
+        base_url=os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+    )
 
 
 def _normalize_domain(url: str) -> str:
