@@ -46,9 +46,10 @@ def fetch_ref_domains(url: str, api_key: str) -> dict:
             follow_redirects=True,
         )
         if resp.status_code != 200:
-            logger.warning("Ahrefs ref-domains [%d] %s — %s",
-                           resp.status_code, url, resp.text[:200])
-            return {"ref_domains_dr10": 0, "ref_domains_total": 0}
+            err = resp.text[:300]
+            logger.warning("Ahrefs ref-domains [%d] %s — %s", resp.status_code, url, err)
+            return {"ref_domains_dr10": 0, "ref_domains_total": 0,
+                    "_ahrefs_error": f"HTTP {resp.status_code}: {err}"}
 
         data    = resp.json()
         # Ahrefs v3 returns {"refdomains": [...], "total": N}
@@ -86,9 +87,9 @@ def fetch_organic_keywords(url: str, api_key: str, limit: int = 10) -> list:
             follow_redirects=True,
         )
         if resp.status_code != 200:
-            logger.warning("Ahrefs org-kw [%d] %s — %s",
-                           resp.status_code, url, resp.text[:200])
-            return []
+            err = resp.text[:300]
+            logger.warning("Ahrefs org-kw [%d] %s — %s", resp.status_code, url, err)
+            return [{"_error": f"HTTP {resp.status_code}: {err}"}]
 
         data = resp.json()
         # Ahrefs v3 returns {"organic_keywords": [...]} or {"keywords": [...]}

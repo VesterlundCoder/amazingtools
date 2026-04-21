@@ -176,16 +176,26 @@ def _is_blocked_by_robots(url: str, robots_txt: Optional[str]) -> bool:
 
 def _parse_page(url: str, body: bytes, base_netloc: str) -> PageData:
     p = PageData(url=url)
-    soup = BeautifulSoup(body, "html.parser")
+    try:
+        soup = BeautifulSoup(body, "lxml")
+    except Exception:
+        soup = BeautifulSoup(body, "html.parser")
 
     # Title
     title_tag = soup.find("title")
     p.title = title_tag.get_text(strip=True) if title_tag else None
 
-    # H1
+    # H1 — check text content, fall back to aria-label or img alt
     h1_tags = soup.find_all("h1")
     p.h1_count = len(h1_tags)
-    p.h1 = h1_tags[0].get_text(strip=True) if h1_tags else None
+    if h1_tags:
+        h1_text = h1_tags[0].get_text(strip=True)
+        if not h1_text:
+            h1_text = (h1_tags[0].get("aria-label", "") or
+                       (h1_tags[0].find("img") or {}).get("alt", ""))
+        p.h1 = h1_text.strip() or None
+    else:
+        p.h1 = None
 
     # Meta description
     meta_desc = soup.find("meta", attrs={"name": re.compile(r"^description$", re.I)})

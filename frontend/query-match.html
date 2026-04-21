@@ -59,15 +59,37 @@
       Query<span style="color:#0bb4aa">Match</span>
     </h1>
     <p style="font-size:14px;color:#666;max-width:520px;line-height:1.6;margin-bottom:28px">
-      Semantic relevance analysis. Enter any URL and a search query to see how well each section aligns — ranked by cosine similarity using OpenAI embeddings.
+      Semantic relevance analysis. Analyse a URL or paste text directly — sections are ranked by cosine similarity to your keyword.
     </p>
 
     <!-- Input form -->
     <div class="card" style="padding:24px;max-width:680px">
-      <div style="margin-bottom:14px">
-        <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#888;display:block;margin-bottom:6px">Page URL</label>
-        <input id="url-input" class="input-field" placeholder="https://example.com/your-page" type="url"/>
+
+      <!-- Mode toggle -->
+      <div style="display:flex;gap:0;margin-bottom:18px;border:1px solid #e2e8f0;border-radius:9px;overflow:hidden;width:fit-content">
+        <button id="mode-url-btn" onclick="setMode('url')"
+          style="padding:7px 20px;font-size:13px;font-weight:600;border:none;cursor:pointer;background:#0bb4aa;color:#fff">🔗 URL</button>
+        <button id="mode-text-btn" onclick="setMode('text')"
+          style="padding:7px 20px;font-size:13px;font-weight:600;border:none;cursor:pointer;background:#fff;color:#555">📋 Paste Text</button>
       </div>
+
+      <!-- URL mode -->
+      <div id="url-mode">
+        <div style="margin-bottom:14px">
+          <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#888;display:block;margin-bottom:6px">Page URL</label>
+          <input id="url-input" class="input-field" placeholder="https://example.com/your-page" type="url"/>
+        </div>
+      </div>
+
+      <!-- Paste Text mode -->
+      <div id="text-mode" style="display:none">
+        <div style="margin-bottom:14px">
+          <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#888;display:block;margin-bottom:6px">Paste Text</label>
+          <textarea id="text-input" class="input-field" rows="7" placeholder="Paste any text here — article, blog post, product description..."
+            style="resize:vertical;line-height:1.6"></textarea>
+        </div>
+      </div>
+
       <div style="margin-bottom:18px">
         <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#888;display:block;margin-bottom:6px">Target Keyword / Query</label>
         <input id="query-input" class="input-field" placeholder="e.g. SEO audit tool for agencies" onkeydown="if(event.key==='Enter')runAnalysis()"/>
@@ -139,6 +161,17 @@
 
   function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
+  let _mode = 'url';
+  function setMode(m) {
+    _mode = m;
+    document.getElementById('url-mode').style.display  = m === 'url'  ? '' : 'none';
+    document.getElementById('text-mode').style.display = m === 'text' ? '' : 'none';
+    document.getElementById('mode-url-btn').style.background  = m === 'url'  ? '#0bb4aa' : '#fff';
+    document.getElementById('mode-url-btn').style.color       = m === 'url'  ? '#fff'    : '#555';
+    document.getElementById('mode-text-btn').style.background = m === 'text' ? '#0bb4aa' : '#fff';
+    document.getElementById('mode-text-btn').style.color      = m === 'text' ? '#fff'    : '#555';
+  }
+
   function showState(name) {
     ['idle','loading','error','results'].forEach(s => {
       document.getElementById(`state-${s}`).style.display = s === name ? '' : 'none';
@@ -158,9 +191,7 @@
   }
 
   async function runAnalysis() {
-    const url   = document.getElementById('url-input').value.trim();
     const query = document.getElementById('query-input').value.trim();
-    if (!url)   { alert('Enter a page URL.'); return; }
     if (!query) { alert('Enter a keyword or query.'); return; }
 
     const btn = document.getElementById('analyze-btn');
@@ -169,11 +200,24 @@
     showState('loading');
 
     try {
-      const r = await fetch(`${API_BASE}/api/analyze/semantic`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ url, query, max_sections: 40 }),
-      });
+      let r;
+      if (_mode === 'text') {
+        const text = document.getElementById('text-input').value.trim();
+        if (!text) { alert('Paste some text first.'); btn.disabled=false; btn.textContent='Analyze →'; showState('idle'); return; }
+        r = await fetch(`${API_BASE}/api/analyze/semantic-text`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ text, query, max_sections: 40 }),
+        });
+      } else {
+        const url = document.getElementById('url-input').value.trim();
+        if (!url) { alert('Enter a page URL.'); btn.disabled=false; btn.textContent='Analyze →'; showState('idle'); return; }
+        r = await fetch(`${API_BASE}/api/analyze/semantic`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ url, query, max_sections: 40 }),
+        });
+      }
       if (!r.ok) {
         const err = await r.json().catch(() => ({}));
         throw new Error(err.detail || `HTTP ${r.status}`);

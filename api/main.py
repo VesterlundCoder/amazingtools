@@ -266,6 +266,12 @@ class SemanticRequest(BaseModel):
     max_sections: int = 30
 
 
+class TextSemanticRequest(BaseModel):
+    text:         str
+    query:        str
+    max_sections: int = 30
+
+
 class RewriteRequest(BaseModel):
     section: str
     query:   str
@@ -555,6 +561,79 @@ def _cosine_sim(a: list, b: list) -> float:
     return dot / (na * nb + 1e-10)
 
 
+def _sections_from_soup(soup: BeautifulSoup) -> list[dict]:
+    """Parse soup into merged content sections (100-word minimum per section)."""
+    for tag in soup(["nav", "header", "footer", "script", "style", "noscript", "aside"]):
+        tag.decompose()
+
+    body = soup.find("main") or soup.find("article") or soup.body
+    if not body:
+        return []
+
+    # Pass 1: collect raw elements
+    raw: list[dict] = []
+    current_heading = ""
+    current_level   = 0
+    for el in body.find_all(["h1","h2","h3","h4","h5","h6","p","li"]):
+        text = el.get_text(" ", strip=True)
+        if not text or len(text) < 10:
+            continue
+        if el.name[0] == "h":
+            current_heading = text
+            current_level   = int(el.name[1])
+            raw.append({"type": "heading", "level": current_level,
+                        "tag": el.name, "text": text, "heading": text})
+        else:
+            raw.append({"type": "text", "tag": el.name,
+                        "text": text, "heading": current_heading,
+                        "level": current_level})
+
+    # Pass 2: merge consecutive text paragraphs under the same heading
+    # into one section; split only when heading changes or chunk >= 100 words
+    CHUNK_WORDS = 100
+    merged: list[dict] = []
+    buf_text: list[str] = []
+    buf_heading = ""
+    buf_level   = 0
+
+    def _flush():
+        if buf_text:
+            merged.append({"type": "text", "tag": "p",
+                           "text": " ".join(buf_text),
+                           "heading": buf_heading, "level": buf_level})
+        buf_text.clear()
+
+    for item in raw:
+        if item["type"] == "heading":
+            _flush()
+            merged.append(item)
+            buf_heading = item["text"]
+            buf_level   = item["level"]
+        else:
+            if item["heading"] != buf_heading:
+                _flush()
+                buf_heading = item["heading"]
+                buf_level   = item["level"]
+            buf_text.append(item["text"])
+            if sum(len(t.split()) for t in buf_text) >= CHUNK_WORDS:
+                _flush()
+    _flush()
+
+    return merged[:80]
+
+
+def _sections_from_text(text: str) -> list[dict]:
+    """Split raw pasted text into 100-word chunks for embedding."""
+    words  = text.split()
+    chunks = []
+    size   = 100
+    for i in range(0, len(words), size):
+        chunk = " ".join(words[i:i + size])
+        chunks.append({"type": "text", "tag": "p", "text": chunk,
+                       "heading": f"Chunk {i // size + 1}", "level": 0})
+    return chunks
+
+
 async def _fetch_page_sections(url: str) -> list[dict]:
     try:
         async with httpx.AsyncClient(
@@ -567,28 +646,10 @@ async def _fetch_page_sections(url: str) -> list[dict]:
         raise HTTPException(400, detail=f"Could not fetch URL: {e}")
 
     soup = BeautifulSoup(r.text, "lxml")
-    for tag in soup(["nav", "header", "footer", "script", "style", "noscript", "aside"]):
-        tag.decompose()
-
-    body = soup.find("main") or soup.find("article") or soup.body
-    if not body:
+    sections = _sections_from_soup(soup)
+    if not sections:
         raise HTTPException(400, detail="No readable content found on page.")
-
-    sections = []
-    current_heading = ""
-    for el in body.find_all(["h1","h2","h3","h4","h5","h6","p","li"]):
-        text = el.get_text(" ", strip=True)
-        if not text or len(text) < 15:
-            continue
-        if el.name[0] == "h":
-            current_heading = text
-            sections.append({"type": "heading", "level": int(el.name[1]),
-                              "tag": el.name, "text": text, "heading": text})
-        else:
-            sections.append({"type": "text", "tag": el.name,
-                              "text": text, "heading": current_heading})
-
-    return sections[:120]
+    return sections
 
 
 # ── Semantic endpoints ─────────────────────────────────────────────────────────
@@ -629,6 +690,41 @@ async def semantic_analysis(req: SemanticRequest):
         "url":            req.url,
         "query":          req.query,
         "page_title":     page_title,
+        "total_sections": len(sections),
+        "sections":       results[:req.max_sections],
+    }
+
+
+@app.post("/api/analyze/semantic-text")
+async def semantic_analysis_text(req: TextSemanticRequest):
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        raise HTTPException(500, detail="OPENAI_API_KEY not configured.")
+    if not req.text.strip():
+        raise HTTPException(400, detail="text is empty.")
+
+    sections = _sections_from_text(req.text)
+    if not sections:
+        raise HTTPException(400, detail="No content to analyse.")
+
+    texts = [s["text"] for s in sections]
+    oai   = OpenAI(api_key=api_key, base_url=OPENAI_BASE_URL)
+    try:
+        emb = oai.embeddings.create(model=OPENAI_EMBED_MODEL, input=[req.query] + texts)
+    except Exception as e:
+        raise HTTPException(500, detail=f"Embedding error: {e}")
+
+    embeddings = [e.embedding for e in emb.data]
+    query_emb  = embeddings[0]
+    results = []
+    for i, sec in enumerate(sections):
+        sim = _cosine_sim(query_emb, embeddings[i + 1])
+        results.append({**sec, "similarity": round(float(sim), 4), "index": i})
+    results.sort(key=lambda x: x["similarity"], reverse=True)
+    return {
+        "url":            "",
+        "query":          req.query,
+        "page_title":     "Pasted text",
         "total_sections": len(sections),
         "sections":       results[:req.max_sections],
     }
