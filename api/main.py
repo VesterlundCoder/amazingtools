@@ -685,7 +685,7 @@ async def semantic_analysis(req: SemanticRequest):
         raise HTTPException(400, detail="No readable content found.")
 
     texts = [s["text"] for s in sections]
-    oai   = OpenAI(api_key=api_key, base_url=OPENAI_BASE_URL)
+    oai   = OpenAI(api_key=api_key, base_url=OPENAI_BASE_URL, timeout=300.0)
 
     try:
         emb = oai.embeddings.create(
@@ -728,7 +728,7 @@ async def semantic_analysis_text(req: TextSemanticRequest):
         raise HTTPException(400, detail="No content to analyse.")
 
     texts = [s["text"] for s in sections]
-    oai   = OpenAI(api_key=api_key, base_url=OPENAI_BASE_URL)
+    oai   = OpenAI(api_key=api_key, base_url=OPENAI_BASE_URL, timeout=300.0)
     try:
         emb = oai.embeddings.create(model=OPENAI_EMBED_MODEL, input=[req.query] + texts)
     except Exception as e:
@@ -756,7 +756,7 @@ async def rewrite_section(req: RewriteRequest):
     if not api_key:
         raise HTTPException(500, detail="OPENAI_API_KEY not configured.")
 
-    oai = OpenAI(api_key=api_key, base_url=OPENAI_BASE_URL)
+    oai = OpenAI(api_key=api_key, base_url=OPENAI_BASE_URL, timeout=300.0)
     prompt = (
         f'Rewrite the text below to be more semantically aligned with the keyword/query "{req.query}".\n'
         f'Keep the same language, structure type, and approximate length. Improve relevance naturally.'
@@ -948,7 +948,7 @@ def mevo_chat(req: MevoChatRequest):
     if not api_key:
         raise HTTPException(500, "OPENAI_API_KEY not configured")
     from openai import OpenAI
-    oai   = OpenAI(api_key=api_key, base_url=OPENAI_BASE_URL)
+    oai   = OpenAI(api_key=api_key, base_url=OPENAI_BASE_URL, timeout=300.0)
     model = os.environ.get("OPENAI_CHAT_MODEL", "gpt-4o-mini")
     msgs  = []
     if req.system:
@@ -1364,7 +1364,7 @@ def _reward_cron_job():
 def _auto_analyze_and_act(job_id: str, client_url: str, results_dict: dict, api_key: str, wp_creds: dict | None = None):
     """Run after crawl: sub-agent analysis, action extraction, WP execution, memory + history."""
     logger.info("[auto-agent] Starting for job %s (%s)", job_id, client_url)
-    oai          = OpenAI(api_key=api_key, base_url=OPENAI_BASE_URL)
+    oai          = OpenAI(api_key=api_key, base_url=OPENAI_BASE_URL, timeout=300.0)
     client_data  = results_dict.get(client_url, {})
     pages        = client_data.get("pages", [])
     metrics      = _extract_metrics(results_dict, client_url)
@@ -1863,7 +1863,7 @@ def analyze_job(job_id: str, apply_actions: bool = True):
     learning_ctx = _get_learning_context(client_url)
     prompt = _build_prompt(results, learning_context=learning_ctx)
 
-    client = OpenAI(api_key=api_key, base_url=OPENAI_BASE_URL)
+    client = OpenAI(api_key=api_key, base_url=OPENAI_BASE_URL, timeout=300.0)
     response = client.chat.completions.create(
         model=OPENAI_CHAT_MODEL,
         messages=[
@@ -1912,7 +1912,7 @@ async def mevo_chat(req: ChatRequest):
     messages.append({"role": "user", "content": req.message})
 
     try:
-        client = OpenAI(api_key=api_key, base_url=OPENAI_BASE_URL)
+        client = OpenAI(api_key=api_key, base_url=OPENAI_BASE_URL, timeout=300.0)
         resp = client.chat.completions.create(
             model=OPENAI_MINI_MODEL,
             messages=messages,
