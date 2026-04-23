@@ -846,7 +846,7 @@ def clients_create(data: dict, background_tasks: BackgroundTasks):
     if not data.get("company_name"):
         raise HTTPException(400, "company_name required")
     customer = client_db.create_customer(data)
-    seo_api = os.environ.get("SEO_AGENT_API_URL", "").rstrip("/")
+    seo_api = (os.environ.get("SEOAGENT_URL") or os.environ.get("SEO_AGENT_API_URL", "")).rstrip("/")
     if seo_api and data.get("primary_domain"):
         background_tasks.add_task(_notify_seo_agent, seo_api, data)
     return customer
