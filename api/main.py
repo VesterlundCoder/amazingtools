@@ -839,14 +839,14 @@ def _notify_seo_agent(seo_api: str, data: dict) -> None:
             "location":        location,
             "business_type":   data.get("industry", ""),
         }
-        resp = httpx.post(f"{seo_api}/projects", json=payload, timeout=15)
+        resp = httpx.post(f"{seo_api}/projects", json=payload, timeout=httpx.Timeout(8.0, connect=5.0))
         logger.info("[seo-agent] Registered %s → %s %s", domain, resp.status_code, resp.text[:120])
     except Exception as e:
         logger.warning("[seo-agent] Notify failed: %s", e)
 
 
 @app.post("/api/clients")
-def clients_create(data: dict, background_tasks: BackgroundTasks):
+def clients_create(data: dict):
     if not data.get("company_name"):
         raise HTTPException(400, "company_name required")
     try:
@@ -856,7 +856,9 @@ def clients_create(data: dict, background_tasks: BackgroundTasks):
         raise HTTPException(500, detail=f"Database error: {e}")
     seo_api = (os.environ.get("SEOAGENT_URL") or os.environ.get("SEO_AGENT_API_URL", "")).rstrip("/")
     if seo_api and data.get("primary_domain"):
-        background_tasks.add_task(_notify_seo_agent, seo_api, data)
+        import threading
+        t = threading.Thread(target=_notify_seo_agent, args=(seo_api, data), daemon=True)
+        t.start()
     return customer
 
 
