@@ -809,7 +809,11 @@ async def _ahrefs_get(path: str, params: dict, api_key: str) -> dict:
 
 @app.get("/api/clients")
 def clients_list():
-    return client_db.list_customers()
+    try:
+        return client_db.list_customers()
+    except Exception as e:
+        logger.error("clients_list DB error: %s", e)
+        raise HTTPException(500, detail=f"Database error: {e}")
 
 
 def _notify_seo_agent(seo_api: str, data: dict) -> None:
@@ -845,7 +849,11 @@ def _notify_seo_agent(seo_api: str, data: dict) -> None:
 def clients_create(data: dict, background_tasks: BackgroundTasks):
     if not data.get("company_name"):
         raise HTTPException(400, "company_name required")
-    customer = client_db.create_customer(data)
+    try:
+        customer = client_db.create_customer(data)
+    except Exception as e:
+        logger.error("clients_create DB error: %s", e)
+        raise HTTPException(500, detail=f"Database error: {e}")
     seo_api = (os.environ.get("SEOAGENT_URL") or os.environ.get("SEO_AGENT_API_URL", "")).rstrip("/")
     if seo_api and data.get("primary_domain"):
         background_tasks.add_task(_notify_seo_agent, seo_api, data)

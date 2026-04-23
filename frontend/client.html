@@ -178,8 +178,13 @@ let _clients = [];
 async function loadClients() {
   try {
     const r = await fetch(`${API}/api/clients`);
-    _clients = await r.json();
-  } catch { _clients = []; }
+    if (!r.ok) throw new Error(`API error ${r.status}`);
+    const data = await r.json();
+    _clients = Array.isArray(data) ? data : [];
+  } catch(e) {
+    console.error('loadClients failed:', e);
+    _clients = [];
+  }
   renderClients();
   updateStats();
 }
