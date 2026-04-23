@@ -812,11 +812,44 @@ def clients_list():
     return client_db.list_customers()
 
 
+def _notify_seo_agent(seo_api: str, data: dict) -> None:
+    """POST new client to SEO Agent API (responsible-insight). Best-effort."""
+    try:
+        domain = data.get("primary_domain", "").strip()
+        if not domain:
+            return
+        if not domain.startswith("http"):
+            domain = f"https://{domain}"
+        goals = data.get("goals") or []
+        kws = [g if isinstance(g, str) else g.get("title", "") for g in goals]
+        kws = [k for k in kws if k]
+        location = data.get("location", "")
+        if location:
+            kws.insert(0, f"{data.get('industry', '')} {location}".strip())
+        payload = {
+            "site_url":        domain,
+            "wp_user":         data.get("wp_user", ""),
+            "wp_password":     data.get("wp_password", ""),
+            "site_name":       data.get("company_name", ""),
+            "target_keywords": kws,
+            "location":        location,
+            "business_type":   data.get("industry", ""),
+        }
+        resp = httpx.post(f"{seo_api}/projects", json=payload, timeout=15)
+        logger.info("[seo-agent] Registered %s → %s %s", domain, resp.status_code, resp.text[:120])
+    except Exception as e:
+        logger.warning("[seo-agent] Notify failed: %s", e)
+
+
 @app.post("/api/clients")
-def clients_create(data: dict):
+def clients_create(data: dict, background_tasks: BackgroundTasks):
     if not data.get("company_name"):
         raise HTTPException(400, "company_name required")
-    return client_db.create_customer(data)
+    customer = client_db.create_customer(data)
+    seo_api = os.environ.get("SEO_AGENT_API_URL", "").rstrip("/")
+    if seo_api and data.get("primary_domain"):
+        background_tasks.add_task(_notify_seo_agent, seo_api, data)
+    return customer
 
 
 @app.get("/api/clients/{cid}")

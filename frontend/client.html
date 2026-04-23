@@ -128,9 +128,15 @@
         <label style="font-size:11px;font-weight:700;text-transform:uppercase;color:#888;letter-spacing:.06em;display:block;margin-bottom:5px">Primary Domain</label>
         <input id="new-domain" class="input-field" placeholder="nordikafurniture.se"/>
       </div>
-      <div>
-        <label style="font-size:11px;font-weight:700;text-transform:uppercase;color:#888;letter-spacing:.06em;display:block;margin-bottom:5px">Industry</label>
-        <input id="new-industry" class="input-field" placeholder="E-commerce, B2B SaaS, Retail…"/>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div>
+          <label style="font-size:11px;font-weight:700;text-transform:uppercase;color:#888;letter-spacing:.06em;display:block;margin-bottom:5px">Industry</label>
+          <input id="new-industry" class="input-field" placeholder="Elektriker, E-commerce…"/>
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;text-transform:uppercase;color:#888;letter-spacing:.06em;display:block;margin-bottom:5px">Location <span style="color:#aaa;font-weight:400">(local SEO)</span></label>
+          <input id="new-location" class="input-field" placeholder="Jönköping, Stockholm…"/>
+        </div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div>
@@ -249,7 +255,7 @@ function openCreateModal() {
 }
 function closeCreateModal() {
   document.getElementById('create-modal').style.display = 'none';
-  ['new-company','new-domain','new-industry','new-markets','new-competitors','new-goal']
+  ['new-company','new-domain','new-industry','new-location','new-markets','new-competitors','new-goal']
     .forEach(id => { document.getElementById(id).value = ''; });
   document.getElementById('create-error').style.display = 'none';
 }
@@ -267,6 +273,7 @@ async function submitCreate() {
     company_name:   name,
     primary_domain: document.getElementById('new-domain').value.trim(),
     industry:       document.getElementById('new-industry').value.trim(),
+    location:       document.getElementById('new-location').value.trim(),
     service_mode:   document.getElementById('new-mode').value,
     markets, competitors, goals,
   };
