@@ -428,14 +428,15 @@ def run_crawl(job_id: str, client_url: str, competitor_urls: list[str],
         # ── PageSpeed / Core Web Vitals enrichment (top 20 pages) ──────────
         client_result = results_dict.get(client_url, {})
         pages = client_result.get("pages", [])
+        _psi_key = os.environ.get("PSI_API_KEY", "")
         psi_urls = [
             p["url"] for p in pages
             if p.get("status_code") == 200 and not p.get("noindex")
         ][:20]
-        if psi_urls:
+        if psi_urls and _psi_key:
             psi_data = pagespeed_client.fetch_pagespeed_batch(
                 psi_urls,
-                api_key=os.environ.get("PSI_API_KEY", ""),
+                api_key=_psi_key,
             )
             pagespeed_client.merge_psi_into_pages(pages, psi_data)
             logger.info(
@@ -1620,7 +1621,7 @@ def _start_scheduler():
     except Exception:
         return
 
-    for site in sites:
+    for idx, site in enumerate(sites):
         url   = site["url"]
         hours = int(site["interval_hours"] or 24)
         mp    = int(site["max_pages"] or 200)
@@ -1628,6 +1629,7 @@ def _start_scheduler():
         wp_creds = None
         if site.get("wp_url") or site.get("wp_user"):
             wp_creds = {"wp_url": site.get("wp_url"), "wp_user": site.get("wp_user"), "wp_app_password": site.get("wp_app_password")}
+        stagger_minutes = 5 + idx * 10
         _scheduler.add_job(
             _scheduled_crawl,
             trigger="interval",
@@ -1640,9 +1642,9 @@ def _start_scheduler():
             },
             id=f"crawl_{url}",
             replace_existing=True,
-            next_run_time=datetime.now(timezone.utc) + timedelta(minutes=2),
+            next_run_time=datetime.now(timezone.utc) + timedelta(minutes=stagger_minutes),
         )
-        logger.info("[scheduler] Scheduled %s every %dh", url, hours)
+        logger.info("[scheduler] Scheduled %s every %dh (first run in %d min)", url, hours, stagger_minutes)
 
     # Weekly reward cron (Phase 4)
     _scheduler.add_job(
